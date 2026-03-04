@@ -1,8 +1,8 @@
 # 68K-SH2 Communication
 
-**Last Updated**: February 17, 2026
+**Last Updated**: March 3, 2026
 **Purpose:** Communication protocol and coordination between 68000 and dual SH2 processors
-**Status:** Reference document — reflects B-003/B-004 optimizations (Feb 2026)
+**Status:** Reference document — reflects B-003/B-004/B-005 optimizations (Feb–Mar 2026)
 **Related:** [COMM_REGISTER_REFERENCE.md](../disasm/sh2/COMM_REGISTER_REFERENCE.md) for register-level quick reference, [MASTER_SLAVE_ANALYSIS.md](architecture/MASTER_SLAVE_ANALYSIS.md) for validated v2.3 sync protocol
 
 ---
@@ -47,13 +47,13 @@ The 32X has **8 COMM registers** (COMM0-COMM7) at **2-byte (word) intervals**:
 
 | 68K Address | SH2 Address | Name  | VRD Usage (Current) |
 |-------------|-------------|-------|---------------------|
-| $A15120 | $20004020 | COMM0 | Trigger (HI) + dispatch index (LO); B-004 uses $2222 |
+| $A15120 | $20004020 | COMM0 | Trigger (HI) + dispatch index (LO); B-004=$2222, B-005=$0125 |
 | $A15122 | $20004022 | COMM1 | **System signal — do not write** (V-INT/scene-init/frame-swap handshake) |
-| $A15124 | $20004024 | COMM2 | **Slave cmd byte** (Sega calls this "COMM1") / Source ptr hi (B-004) / Width (B-003) |
-| $A15126 | $20004026 | COMM3 | Source ptr lo (B-004) / Height (B-003) |
-| $A15128 | $20004028 | COMM4 | Dest ptr hi (B-004) / Data ptr hi (B-003) |
-| $A1512A | $2000402A | COMM5 | Dest ptr lo (B-004) / Data ptr lo (B-003) |
-| $A1512C | $2000402C | COMM6 | Height (HI) + words-per-row (LO) (B-004) / Add value (B-003) / Handshake (original) |
+| $A15124 | $20004024 | COMM2 | **Slave cmd byte** (Sega calls this "COMM1") / Source ptr hi (B-004) / Width (B-003) / **NEVER WRITTEN** (B-005) |
+| $A15126 | $20004026 | COMM3 | Source ptr lo (B-004) / Height (B-003) / Source ptr hi (B-005) |
+| $A15128 | $20004028 | COMM4 | Dest ptr hi (B-004) / Data ptr hi (B-003) / Source ptr lo (B-005) |
+| $A1512A | $2000402A | COMM5 | Dest ptr lo (B-004) / Data ptr lo (B-003) / Dest ptr hi (B-005) |
+| $A1512C | $2000402C | COMM6 | Height (HI) + words-per-row (LO) (B-004) / Add value (B-003) / Dest ptr lo (B-005) |
 | $A1512E | $2000402E | COMM7 | Slave doorbell: $0027=cmd27 work (B-003), $0000=idle |
 
 **Access patterns:**
@@ -224,6 +224,33 @@ Keeps Master SH2 dispatch but writes all params to COMM2-6 at once (COMM1 untouc
 See [MASTER_SLAVE_ANALYSIS.md](architecture/MASTER_SLAVE_ANALYSIS.md) for validated synchronization protocol details.
 See [COMM_REGISTER_REFERENCE.md](../disasm/sh2/COMM_REGISTER_REFERENCE.md) for register-level details and SH2 assembly patterns.
 
+### B-005: Single-Shot sh2_send_cmd_wait / cmd $25 (Mar 2026) ✅ DONE
+
+Same single-shot pattern as B-004, applied to `sh2_send_cmd_wait` (cmd $25 = RLE decompression). Eliminates the 2-phase COMM6 handshake. 8 calls during scene init (not per-frame). Tested: 3600-frame autoplay (menus + race), no crash (2026-03-03).
+
+```
+68K (sh2_send_cmd_wait)          Master SH2 ($300500)
+ │                                    │
+ ├─ Wait COMM0_HI==0 ───────────────>│  Idle poll
+ ├─ A0+$02000000→COMM3:4            │
+ ├─ A1→COMM5:6                      │
+ ├─ $25→COMM0_LO (index)            │
+ ├─ $01→COMM0_HI (trigger) ────────>│  Dispatch to entry $25
+ ├─ Wait COMM0_LO==0 (params read)  ├─ Read COMM3:4, COMM5:6
+ ├─ RTS                              ├─ Signal params read: clr COMM0_LO
+ │                                    ├─ Reconstruct A0=$02xxxxxx, A1=$06xxxxxx
+ │                                    ├─ JSR $06005058 (RLE decompressor)
+ │                                    ├─ func_084: clr COMM0_HI (done)
+ │                                    └─ Return to dispatch loop
+```
+
+- **COMM layout**: COMM0_HI=$01 (trigger), COMM0_LO=$25 (dispatch index); COMM3:4=A0 (source, $02xxxxxx SDRAM cache-through); COMM5:6=A1 (dest, full SH2 address); COMM2_HI=NEVER WRITTEN; COMM1+COMM7=untouched
+- **Dispatch mechanism**: Same as B-004. COMM0_LO=$25 → shll2 → offset $94 → jump table entry $25 at $06000814 → $02300500.
+- **8 calls during scene init**, ~100 cycles each (was ~350 with 3-phase COMM6 handshake)
+- **`sh2_wait_response` ($E342) removed**: Address slot overwritten by B-005 NOP padding — function no longer exists
+- Jump table entry at $020814 redirected to expansion $02300500
+- **Files:** [code_e200.asm](../disasm/sections/code_e200.asm):225 (68K), [cmd25_single_shot.asm](../disasm/sh2/expansion/cmd25_single_shot.asm) (SH2)
+
 ---
 
 ## 68K Functions That Communicate with SH2 (✅ Confirmed)
@@ -232,9 +259,9 @@ See [COMM_REGISTER_REFERENCE.md](../disasm/sh2/COMM_REGISTER_REFERENCE.md) for r
 
 | Address | Name | Description |
 |---------|------|-------------|
-| $00E316 | `sh2_send_cmd_wait` | Wait for ready, send command (1 blocking loop) |
-| $00E35A | `sh2_send_cmd` | **B-004:** Single-shot param write + COMM0 trigger (was 3 blocking loops) |
-| $00E342 | `sh2_wait_response` | Poll COMM6 for SH2 response (used by remaining 3-phase cmds) |
+| $00E316 | `sh2_send_cmd_wait` | **B-005:** Single-shot param write + COMM0 trigger for cmd $25 (was 3-phase COMM6 handshake) |
+| $00E35A | `sh2_send_cmd` | **B-004:** Single-shot param write + COMM0 trigger for cmd $22 (was 3 blocking loops) |
+| $00E342 | ~~`sh2_wait_response`~~ | **REMOVED (B-005):** Slot overwritten by NOP padding; was COMM6 poll for 3-phase protocol |
 | $00E3B4 | `sh2_cmd_27` | **B-003:** Fire-and-forget via COMM2-6 + COMM7 doorbell (was 2 blocking loops, 21 calls/frame) |
 | $00E406 | `sh2_cmd_2F` | Extended command $2F (3 inline blocking loops, 4 params) |
 | $00E22C | `sh2_graphics_cmd` | General graphics command |

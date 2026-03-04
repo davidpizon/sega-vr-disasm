@@ -31,12 +31,14 @@ The most critical path is:
 ```
 sh2_graphics_cmd
     ↓
-sh2_send_cmd_wait   ← blocking synchronization
+sh2_send_cmd_wait   ← was blocking synchronization (B-005: now single-shot)
     ↓
-sh2_wait_response
+sh2_wait_response   ← REMOVED by B-005 (slot is NOP padding)
 ```
 
-This pair of functions represents a **global serialization barrier**. Any subsystem that submits rendering or scene-related commands must block until the SH-2 completes the request and explicitly signals completion.
+> **Update (B-003/B-004/B-005, Feb–Mar 2026):** This serialization barrier has been substantially reduced. `sh2_send_cmd_wait` now uses a single-shot protocol (write all params → trigger → wait params-consumed), and `sh2_wait_response` no longer exists. The remaining blocking is minimal (~100 cycles vs ~350). However, the 68K is still saturated on non-command work, so this did not improve FPS.
+
+This pair of functions originally represented a **global serialization barrier**. Any subsystem that submitted rendering or scene-related commands had to block until the SH-2 completed the request and explicitly signaled completion.
 
 This pattern appears repeatedly across:
 
@@ -164,8 +166,8 @@ The diagram provides a precise roadmap for profiling and debugging:
 
 Priority instrumentation points:
 
-* Entry/exit of `sh2_send_cmd_wait`
-* Entry/exit of `sh2_wait_response`
+* Entry/exit of `sh2_send_cmd_wait` (B-005: now single-shot, ~100 cycles)
+* ~~Entry/exit of `sh2_wait_response`~~ (removed by B-005)
 * Time between graphics command submission and SH-2 completion
 * SH-2 idle vs active cycle distribution
 
@@ -197,10 +199,11 @@ With accurate frame-boundary detection, proper instrumentation, and architectura
 
 | Address | Function | Role |
 |---------|----------|------|
-| $00E316 | `sh2_send_cmd_wait` | **Primary blocking point** - waits for SH2 ready |
-| $00E342 | `sh2_wait_response` | Polls COMM6 for SH2 completion |
+| $00E316 | `sh2_send_cmd_wait` | **B-005:** Single-shot cmd $25 (~100 cycles, 8 calls/scene init) |
+| $00E342 | ~~`sh2_wait_response`~~ | **REMOVED (B-005):** Slot overwritten by NOP padding |
 | $00E22C | `sh2_graphics_cmd` | Graphics command submission (14 calls) |
-| $00E3B4 | `sh2_cmd_27` | Most frequent graphics command (21 calls) |
+| $00E35A | `sh2_send_cmd` | **B-004:** Single-shot cmd $22 (~170 cycles, 14 calls/frame) |
+| $00E3B4 | `sh2_cmd_27` | **B-003:** Fire-and-forget via COMM7 (~50 cycles, 21 calls/frame) |
 | $002890 | `sh2_comm_sync` | COMM register synchronization |
 | $0028C2 | `VDPSyncSH2` | VDP/SH2 sync coordination |
 
@@ -210,8 +213,8 @@ With accurate frame-boundary detection, proper instrumentation, and architectura
 |---------------|------------|----------|------|
 | $06000570 | $020570 | `slave_init` | Initialize Slave, set VBR, wait for Master |
 | $06000592 | $020592 | `slave_command_loop` | Poll COMM1 for commands |
-| $06000608 | $020608 | `slave_delay_loop` | Idle state (64-cycle delay) |
-| $0600060A | $02060A | *(delay NOP)* | **66.5% of Slave cycles spent here** |
+| $06000608 | $020608 | `inline_slave_drain` | **B-003:** COMM7 doorbell handler (was 64-cycle idle delay) |
+| $0600060A | $02060A | *(drain code)* | Processes cmd27 pixel work (was 66.5% idle) |
 
 *Note: This table documents the original 68K→SH2 protocol. v4.0 adds COMM7/COMM5 for Master→Slave offload signaling.*
 

@@ -116,11 +116,12 @@ The expansion space at $300000+ is executed by SH2 processors only and already c
 - Frame-level and PC-level hotspot analysis
 - Automated headless profiling frontend
 
-### Optimization (active development)
+### Optimization (B-003/B-004/B-005 complete)
 - 68K bottleneck identified and quantified (100.1% utilization)
-- SH2 interrupt queue designed (Path B — uses idle Master SH2)
-- Batch command protocol designed
-- v4.0 parallel processing infrastructure built (not yet activated)
+- **B-003:** sh2_cmd_27 → fire-and-forget via COMM7 doorbell (21 calls/frame, ~50 cycles each)
+- **B-004:** sh2_send_cmd → single-shot cmd $22 (14 calls/frame, ~170 cycles each)
+- **B-005:** sh2_send_cmd_wait → single-shot cmd $25 (8 calls/scene init, ~100 cycles each)
+- Per-frame command overhead reduced 64% (~9,450 → ~3,430 cycles)
 - Task tracking in [BACKLOG.md](BACKLOG.md), pitfalls in [KNOWN_ISSUES.md](KNOWN_ISSUES.md)
 
 ## Key Architectural Findings
@@ -129,9 +130,10 @@ The expansion space at $300000+ is executed by SH2 processors only and already c
 |---------|----------|
 | 68K is the sole bottleneck | 100.1% utilization, 127,987 cycles/frame |
 | SH2 optimization alone yields 0% FPS gain | 66.6% Slave reduction → unchanged FPS |
-| ~60% of 68K time is wasted polling | 35 blocking handshakes per frame |
+| ~60% of 68K time is wasted polling | 35 blocking handshakes per frame (pre-optimization baseline) |
+| Command overhead reduced 64% | B-003/B-004/B-005: ~9,450 → ~3,430 cycles/frame |
 | Master SH2 is completely idle | 60 cycles/frame (0.0% utilization) |
-| Slave wastes 66.5% of cycles | Idle delay loop at $0600060A |
+| Slave idle time repurposed (B-003) | Was 66.5% idle at $0600060A, now processes cmd27 pixel work |
 
 ## Custom Profiler
 
@@ -158,10 +160,9 @@ python3 analyze_pc_profile.py profile.csv
 | **Optimization Plan** | [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) (strategy & rationale) |
 | **Bottleneck Analysis** | [ARCHITECTURAL_BOTTLENECK_ANALYSIS.md](analysis/ARCHITECTURAL_BOTTLENECK_ANALYSIS.md) |
 | **68K Profiling** | [68K_BOTTLENECK_ANALYSIS.md](analysis/profiling/68K_BOTTLENECK_ANALYSIS.md) |
-| **Async Design** | [ASYNC_COMMAND_IMPLEMENTATION_PLAN.md](analysis/optimization/ASYNC_COMMAND_IMPLEMENTATION_PLAN.md) |
+| **COMM Protocol** | [68K_SH2_COMMUNICATION.md](analysis/68K_SH2_COMMUNICATION.md) (B-003/B-004/B-005 protocols) |
 | **68K Functions** | [68K_FUNCTION_REFERENCE.md](analysis/68K_FUNCTION_REFERENCE.md) (503+ functions) |
 | **SH2 3D Pipeline** | [SH2_3D_PIPELINE_ARCHITECTURE.md](analysis/sh2-analysis/SH2_3D_PIPELINE_ARCHITECTURE.md) |
-| **Communication** | [68K_SH2_COMMUNICATION.md](analysis/68K_SH2_COMMUNICATION.md) |
 | **Hardware Manual** | [32x-hardware-manual.md](docs/32x-hardware-manual.md) |
 | **Register Hazards** | [32X_REGISTERS.md](analysis/architecture/32X_REGISTERS.md) |
 

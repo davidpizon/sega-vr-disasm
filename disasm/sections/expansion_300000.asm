@@ -225,28 +225,31 @@ shadow_path_wrapper:
         include "sh2/generated/shadow_path_wrapper.inc"
 
 ; ============================================================================
-; BATCH COPY HANDLER: 0x300500 (SH2 address: 0x02300500)
+; CMD25 SINGLE-SHOT HANDLER: 0x300500 (SH2 address: 0x02300500)
 ; ============================================================================
-; Batch copy optimization for reducing 68K blocking waits.
-; Replaces 8 separate sh2_send_cmd_wait calls with a single batch command.
+; B-005: Single-shot decompression handler for cmd $25.
+; Replaces the 3-phase COMM6 handshake protocol with single-shot dispatch.
 ;
-; Protocol (command $26 - BATCH_COPY):
-;   COMM4 = table address (SH2 space)
-;   Table format: [count:16][pad:16][src:32][dst:32][size:32]...
+; Protocol (command $25 - single-shot):
+;   COMM3:4 = A0 source ptr (with $02000000 SDRAM prefix from 68K)
+;   COMM5:6 = A1 dest ptr (full SH2 address, e.g. $0601xxxx)
+;   COMM0_LO = $25 (dispatch index), COMM0_HI = $01 (trigger)
+;   SH2 clears COMM0_LO=$00 after reading params (handshake)
 ;
-; Entry: COMM4 contains pointer to batch table
-; Uses: R0-R5, R8
+; Entry: R8 = $20004020 (COMM base); dispatched via jump table $06000814
+; Calls: decompressor at $06005058, func_084 at $060043F0
+; Size: 64 bytes (52 code + 12 pool)
 ;
-; See: analysis/optimization/BATCH_COPY_COMMAND_DESIGN.md
+; See: disasm/sh2/expansion/cmd25_single_shot.asm for source
 ;
         dcb.b   ($300500 - *), $FF  ; Pad to 0x300500 (auto-sized)
-batch_copy_handler:
-        include "sh2/generated/batch_copy_handler.inc"
+cmd25_single_shot:
+        include "sh2/generated/cmd25_single_shot.inc"
 
 ; ============================================================================
 ; PADDING TO cmd27_queue_drain
 ; ============================================================================
-; Current position: 0x300538 (after batch_copy_handler)
+; Current position: 0x300540 (after cmd25_single_shot, 64 bytes)
 ; Pad to 0x300600 for nice alignment
         dcb.b   ($300600 - *), $FF
 

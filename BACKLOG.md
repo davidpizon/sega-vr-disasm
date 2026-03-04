@@ -35,22 +35,26 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **Key files:** `disasm/sections/code_e200.asm`, `disasm/sections/code_20200.asm`
 
 ### B-004: Single-shot protocol for sh2_send_cmd (14 calls/frame)
-**Status:** REVERTED (2026-02-20) — regression: black bar + crash on first menu choice.
-**Previous attempt (REVERTED 2026-02-14):** Blanket async via general_queue_drain at $FFFC00 — failed due to 3-phase COMM multiplexing protocol constraints. Infrastructure preserved dormant at $301000.
-**v5 (COMM1-safe) — REVERTED:** COMM2:3=A0 (source ptr), COMM4:5=A1 (dest ptr), COMM6_HI=D1 (height), COMM6_LO=D0/2 (words/row). Trigger: write $2222 to COMM0.
-**Root cause of v5 regression (2026-02-20):** Slave SH2 command loop polls `COMM2_HI` (`$20004024`) as its work command byte selector — non-zero triggers Slave dispatch. v5 writes A0 (source ptr, always `$06xxxxxx`) to COMM2:3, making COMM2_HI = `$06` (non-zero). During races the Slave is busy processing sh2_cmd_27 and rarely polls COMM2. During menus the Slave is IDLE and actively polls COMM2_HI every ~25 cycles, catching the spurious `$06` and dispatching to the wrong (cmd-6) handler with garbage parameters → black bar + crash. The 189-frame acceptance test was race-only and did not exercise menu idle state.
-**Why no COMM2-safe layout exists:** All SH2 addresses have non-zero high bytes (`$02xxxxxx`, `$04xxxxxx`, `$06xxxxxx`). There is no way to write A0 or A1 to COMM2:3 without triggering spurious Slave dispatch.
-**Current state:** Fully reverted to original 3-phase blocking protocol. Jump table entry at $020808 restored to $06005198 (SDRAM handler). cmd22_single_shot still in expansion ROM but unreachable (jump table no longer points to it).
-**Future redesign constraint:** Any replacement for cmd $22 must avoid writing non-zero values to COMM2_HI. Options: (a) use a COMM layout that keeps COMM2_HI = $00 (only small integers like D0/D1 < 256 are safe there), (b) temporarily disable Slave via COMM2_HI=$00 signal before writing params (requires Slave cooperation), (c) route via COMM0 single-shot but place only safe values in COMM2.
-**Key files:** `disasm/sections/code_e200.asm`, `disasm/sections/code_20200.asm`, `disasm/sections/code_24200.asm`, `disasm/sh2/expansion/cmd22_single_shot.asm`
+**Status:** DONE (2026-03-03) — v6-corrected protocol verified in PicoDrive (menus + race mode, 3600 frames).
+**v6-corrected design:** COMM2_HI ($A15124) is NEVER written — stays $00 permanently. Slave polls COMM2_HI for dispatch; keeping it $00 prevents all spurious dispatch. Layout: COMM0_HI=$01 trigger, COMM0_LO=$22 index (cleared by SH2 as handshake), COMM2_LO=D0/2, COMM3_HI=D1, COMM3_LO:COMM4=A0[23:0], COMM5:6=A1. COMM1 and COMM7 untouched.
+**SH2 handler:** `cmd22_single_shot` at expansion ROM $023010F0 (108 bytes). Reads params, clears COMM0_LO (handshake), performs block copy, calls func_084 for completion.
+**68K sender:** 64 bytes at $00E35A (+ 26B NOP padding). Waits COMM0_HI==0, writes params, triggers COMM0, waits COMM0_LO==0 (params-consumed handshake).
+**Jump table:** $020808 → $023010F0 (expansion ROM handler).
+**Testing (2026-03-03):** PicoDrive profiling_frontend --autoplay: 3600 frames (menus + race mode). COMM2_HI=$0000 at every sample. No crashes, no visual glitches.
+**Previous failed approaches:** v5 (COMM2:3=A0, COMM2_HI=$06 → Slave dispatch crash in menus). Blanket async (COMM multiplexing violation). See KNOWN_ISSUES.md for full history.
+**Key files:** `disasm/sections/code_e200.asm`, `disasm/sections/code_20200.asm`, `disasm/sh2/expansion/cmd22_single_shot.asm`
 
-### B-005: Command batching (Track 2)
-**Status:** OPEN (B-004 unblocked 2026-02-20)
-**Why:** Reduce 35 submissions to ~3-5 batches for less per-command overhead.
-**Acceptance:** batch_copy_handler works, cmd_27 grouped. Profiler confirms further 68K reduction.
-**Key files:** expansion_300000.asm ($300500 batch_copy_handler)
-**Depends on:** B-004
-**Ref:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) § Track 2
+### B-005: Command protocol optimization (Track 2)
+**Status:** DONE (2026-03-03) — sh2_send_cmd_wait converted to single-shot, profiling completed
+**Original scope:** Batch 35 submissions into ~3-5 batches. **Revised:** Original design invalidated — SH2 can't access Work RAM ($0220F000 unmapped), B-003/B-004 already captured most overhead savings, and the 8-call `sh2_send_cmd_wait` target only runs during scene init (not per frame).
+**What was done:**
+- Re-profiled with B-003+B-004 active: 68K still 100% (127,987 cyc/frame), Master SH2 0%, Slave 80%. Command overhead is ~4,000 cyc (3.1%), down from ~12,000+.
+- Converted `sh2_send_cmd_wait` ($E316) from 3-phase COMM6 handshake to single-shot protocol: COMM3:4=A0 (source), COMM5:6=A1 (dest), params-consumed handshake via COMM0_LO. Eliminates one COMM6 polling loop per call.
+- SH2 handler `cmd25_single_shot` at expansion ROM $300500 (64 bytes). Reads params, clears COMM0_LO, calls existing decompressor at $06005058, then func_084 for completion.
+- Jump table entry $25 at $020814 redirected from $06005024 → $02300500.
+- PicoDrive 3600-frame autoplay verified (menus + race mode). COMM2_HI=$0000 throughout.
+**Key files:** `disasm/sections/code_e200.asm`, `disasm/sh2/expansion/cmd25_single_shot.asm`, `disasm/sections/expansion_300000.asm`, `disasm/sections/code_20200.asm`
+**Next optimization:** Real gains require offloading work to idle Master SH2 (B-006/Track 4), not further command overhead reduction.
 
 ### B-006: Activate v4.0 parallel hooks
 **Status:** REVERTED — all 3 patches disabled (2026-02-11)
@@ -126,9 +130,10 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 
 | ID | Description | Commit | Date |
 |----|-------------|--------|------|
+| B-005 | Single-shot cmd $25 + re-profiling — 3-phase→single-shot, decompressor wrapper at $300500, 3600-frame verified | — | 2026-03-03 |
 | B-011 | SH2 function integration — all 92 IDs verified, doc updated | — | 2026-02-28 |
 | B-013 | Fix SH2 address errors in COMM_REGISTER_USAGE_ANALYSIS.md (7 addresses corrected) | — | 2026-02-28 |
-| B-004 | ~~Single-shot cmd $22 (COMM1-safe v5)~~ REVERTED — Slave COMM2_HI poll causes spurious dispatch in menus | — | 2026-02-20 |
+| B-004 | Single-shot cmd $22 (v6-corrected) — COMM2_HI never written, 3600-frame PicoDrive test passed | — | 2026-03-03 |
 | B-003 | Async sh2_cmd_27 via COMM registers (bypasses Master SH2) | — | 2026-02-17 |
 | B-008 | RV bit profiling — NEVER set, expansion ROM safe (static analysis) | — | 2026-02-16 |
 | B-006 | Activate v4.0 parallel hooks — **PARTIAL**: Patch #2 needs revert (COMM7 collision crash) | 651a415 | 2026-02-10 |

@@ -209,58 +209,61 @@ sh2_load_data:
         rts                                     ; $00E314: $4E75
 
 ; ============================================================================
-; sh2_send_cmd_wait ($00E316) - Wait for Ready, Send Command
+; sh2_send_cmd_wait ($00E316) - Single-Shot Decompression Command (cmd $25)
 ; ============================================================================
-; Purpose: Waits for SH2 to be ready, then sends a command with data pointer
-; Called by: Various graphics/3D functions (8 call sites)
+; Purpose: Sends decompression command to SH2 via single-shot protocol (B-005).
+; Called by: Scene init functions (8 call sites, NOT per-frame)
 ; Parameters:
-;   A0 = 68K data pointer (converted to SH2 address space)
-;   A1 = Secondary data pointer (passed to sh2_wait_response phase 2)
+;   A0 = 68K source data pointer (converted to SH2 SDRAM address)
+;   A1 = SH2 destination pointer (full SH2 address, e.g. $0601xxxx)
 ; Clobbers: A0 (adds $02000000 SH2 offset — original value NOT preserved)
 ; Preserves: D0-D7, A1-A6
 ;
-; BLOCKING: Contains busy-wait loop at $00E316-$00E31C
-; This is a PRIMARY BOTTLENECK FUNCTION
+; Protocol (B-005 single-shot — replaces 3-phase COMM6 handshake):
+;   1. Wait for COMM0_HI==0 (previous command done)
+;   2. Write COMM3:4 = A0 + $02000000 (source ptr, SDRAM cache-through)
+;   3. Write COMM5:6 = A1 (dest ptr, full SH2 address)
+;   4. Write COMM0_LO = $25 (dispatch index), COMM0_HI = $01 (trigger)
+;   5. Wait for COMM0_LO==0 — SH2 clears this after reading all params
+;
+; COMM2_HI SAFETY: writing A0 to COMM3 ($A15126) does NOT touch COMM2 ($A15124).
+;   The longword write covers $A15126-$A15129 (COMM3_HI:COMM3_LO:COMM4_HI:COMM4_LO).
+;   COMM1, COMM7 UNTOUCHED.
+;
+; Size: 52 bytes code + 16 bytes NOP padding = 68 bytes ($00E316-$00E359)
+; Dispatch: COMM0_LO=$25 → SHLL2 → offset $94 → $06000814 → $02300500
 ; ============================================================================
 sh2_send_cmd_wait:
-; --- BLOCKING WAIT LOOP ---
-; Spins until COMM0 high byte == 0, preventing any other 68K work
+; --- WAIT: Previous command complete ---
 .wait_ready:
-        tst.b   COMM0_HI                        ; $00E316: $4A39 $00A1 $5120 - Test command flag
-        bne.s   .wait_ready                     ; $00E31C: $66F8             - Loop until ready
+        tst.b   COMM0_HI                        ; $00E316: $4A39 $00A1 $5120 - Poll: SH2 busy?
+        bne.s   .wait_ready                     ; $00E31C: $66F8             - Loop until idle
 
-; Convert 68K address to SH2 address space
+; --- WRITE PARAMS ---
+; Convert source to SH2 address and write both pointers at once
         adda.l  #SH2_ADDR_OFFSET,a0             ; $00E31E: $D1FC $0200 $0000 - A0 += $02000000
-        move.l  a0,COMM4                        ; $00E324: $23C8 $00A1 $5128 - Write data pointer (COMM4+COMM5)
-        move.w  #HANDSHAKE_READY,COMM6          ; $00E32A: $33FC $0101 $00A1 $512C - Signal ready
-        move.b  #CMD_WAIT_SEND,COMM0_LO         ; $00E332: $13FC $0025 $00A1 $5121 - Command $25
-        move.b  #$01,COMM0_HI                   ; $00E33A: $13FC $0001 $00A1 $5120 - Trigger command
-        ; Falls through to sh2_wait_response
+        move.l  a0,COMM3                        ; $00E324: $23C8 $00A1 $5126 - COMM3:4 = source ptr
+        move.l  a1,COMM5                        ; $00E32A: $23C9 $00A1 $512A - COMM5:6 = dest ptr
 
-; ============================================================================
-; sh2_wait_response ($00E342) - Wait for SH2 Response
-; ============================================================================
-; Purpose: Blocks until SH2 clears handshake, then sets up next transfer
-; Called by: sh2_send_cmd_wait (fall-through), other command functions
-; Parameters:
-;   A1 = Secondary data pointer
-; Clobbers: Nothing
-; Preserves: D0-D7, A0-A6
-;
-; BLOCKING: Contains busy-wait loop at $00E342-$00E348
-; This is a PRIMARY BOTTLENECK FUNCTION
-; ============================================================================
-sh2_wait_response:
-; --- BLOCKING WAIT LOOP ---
-; Spins until COMM6 high byte == 0, preventing any other 68K work
-.wait_ack:
-        tst.b   COMM6                           ; $00E342: $4A39 $00A1 $512C - Test handshake
-        bne.s   .wait_ack                       ; $00E348: $66F8             - Loop until cleared
+; --- TRIGGER: Dispatch index then trigger ---
+        move.b  #CMD_WAIT_SEND,COMM0_LO         ; $00E330: $13FC $0025 $00A1 $5121 - LO=$25 (index)
+        move.b  #$01,COMM0_HI                   ; $00E338: $13FC $0001 $00A1 $5120 - HI=$01 (trigger, LAST)
 
-; Set up secondary pointer for next phase
-        move.l  a1,COMM4                        ; $00E34A: $23C9 $00A1 $5128 - Write secondary ptr (COMM4+COMM5)
-        move.w  #HANDSHAKE_READY,COMM6          ; $00E350: $33FC $0101 $00A1 $512C - Signal ready
-        rts                                     ; $00E358: $4E75             - Return
+; --- WAIT: Params consumed by SH2 ---
+.wait_consumed:
+        tst.b   COMM0_LO                        ; $00E340: $4A39 $00A1 $5121 - SH2 clears after read
+        bne.s   .wait_consumed                  ; $00E346: $66F8             - Loop until cleared
+        rts                                     ; $00E348: $4E75             - Return
+
+; --- NOP padding to preserve 68-byte slot ($E34A-$E359) ---
+        nop                                     ; $00E34A
+        nop                                     ; $00E34C
+        nop                                     ; $00E34E
+        nop                                     ; $00E350
+        nop                                     ; $00E352
+        nop                                     ; $00E354
+        nop                                     ; $00E356
+        nop                                     ; $00E358
 
 ; ============================================================================
 ; sh2_send_cmd ($00E35A) - Direct Command Send (cmd $22) — B-004 v6-corrected

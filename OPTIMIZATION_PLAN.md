@@ -125,7 +125,7 @@ Each command follows a strict `submit → wait → continue` pattern:
 | `func_021_optimized` | $300100 | 96B | Vertex transform (func_016 inlined) | Dormant |
 | `slave_work_wrapper` | $300200 | 76B | COMM7 command dispatch | Dormant |
 | `slave_test_func` | $300280 | 44B | Test harness | Dormant |
-| `batch_copy_handler` | $300500 | ~56B | Batch copy command handler | Dormant |
+| `cmd25_single_shot` | $300500 | 64B | Single-shot decompression (cmd $25) | **ACTIVE (B-005)** |
 | `cmd27_queue_drain` | $300600 | 128B | Queue drain for cmd $27 | **ACTIVE (B-003)** |
 | `slave_comm7_idle_check` | $300700 | 48B | COMM7 doorbell handler | **ACTIVE (B-003)** |
 | `cmdint_handler` | $300800 | 64B | Master CMDINT ISR (reserved) | Dormant |
@@ -326,41 +326,29 @@ All 17 command submissions per frame reuse COMM0/COMM4/COMM6. Naive async would 
 
 ---
 
-### Track 2: Command Batching 🔥🔥 HIGH
+### Track 2: Command Protocol Optimization — DONE (2026-03-03)
 
-**Goal:** Reduce 35 individual command submissions to ~3 batch operations per frame
-**Expected gain:** +10-20% FPS (stacks with Track 1)
-**Risk:** Low-Medium
+**Original goal:** Reduce 35 submissions to ~3-5 batches (+10-20% FPS).
+**Revised scope:** Original batch design invalidated (SH2 can't access Work RAM; pre-B-003/B-004 FPS estimates obsolete; 8-call target is scene-init only). Converted remaining 3-phase function to single-shot instead.
 
-#### The Problem
+#### What Was Done
 
-Even with async submission, each command still requires COMM register setup and handshake. Reducing the total number of submissions reduces per-command overhead.
+1. **Re-profiling** (B-003+B-004 active): 68K still 100% utilized (127,987 cyc/frame). Command overhead is ~4,000 cyc (3.1%), down from ~12,000+. Master SH2 is 0% (completely idle).
 
-#### Batch Copy Command ($26)
+2. **sh2_send_cmd_wait → single-shot** (B-005): Converted the last 3-phase COMM6 handshake function ($E316) to single-shot protocol. COMM3:4=A0 (source), COMM5:6=A1 (dest), params-consumed handshake. New SH2 handler `cmd25_single_shot` at expansion ROM $300500 (64 bytes) calls the existing decompressor at $06005058. PicoDrive 3600-frame verified.
 
-A specific opportunity: 8 sequential `sh2_send_cmd_wait` calls in the copy routine can be replaced with a single batch command.
+3. **Batch design obsoleted:** [BATCH_COPY_COMMAND_DESIGN.md](analysis/optimization/BATCH_COPY_COMMAND_DESIGN.md) marked obsolete — Work RAM table at $FFF000 (SH2 $0220F000) is unmapped. The $300500 slot now holds cmd25_single_shot.
 
-**Design (from BATCH_COPY_COMMAND_DESIGN.md):**
-1. 68K writes command list to SDRAM (8 × 8 bytes = 64 bytes)
-2. 68K sends single batch command $26 with pointer to list
-3. SH2 processes all 8 commands sequentially
-4. Single COMM6 acknowledgment when all complete
+#### Current Command Overhead Summary
 
-**Expected reduction:** 75-87.5% fewer blocking calls for this sequence.
+| Function | Protocol | Calls/Frame | Cycles/Call | Total |
+|----------|----------|-------------|-------------|-------|
+| sh2_cmd_27 ($E3B4) | B-003 async (fire-and-forget) | 21 | ~70 | ~1,470 |
+| sh2_send_cmd ($E35A) | B-004 single-shot | 14 | ~170 | ~2,380 |
+| sh2_send_cmd_wait ($E316) | B-005 single-shot (scene init only) | 0 per frame | ~150 | 0 |
+| **Total** | — | **35** | — | **~3,850** |
 
-**SH2 handler:** `batch_copy_handler` at $300500 (already in expansion ROM layout).
-
-#### Broader Batching Opportunities
-
-| Batch Group | Commands | Current Calls | Batched Calls | Reduction |
-|-------------|----------|---------------|---------------|-----------|
-| Copy sequence | $22-type | 8 | 1 | 87.5% |
-| cmd_27 burst | $27-type | 21 | 1-3 | 86-95% |
-| Graphics init | Mixed | 6 | 1 | 83% |
-| **Total** | — | **35** | **~3-5** | **~86-91%** |
-
-#### References
-- [BATCH_COPY_COMMAND_DESIGN.md](analysis/optimization/BATCH_COPY_COMMAND_DESIGN.md)
+**Next optimization:** Real gains require offloading work from 68K to idle Master SH2 (Track 4), not further command overhead reduction.
 
 ---
 
@@ -650,12 +638,13 @@ python3 analyze_pc_profile.py profile.csv
 | Milestone | Expected FPS | Cumulative Gain | Track | Status |
 |-----------|-------------|-----------------|-------|--------|
 | Baseline (current) | 20-24 | — | — | ✅ Measured |
-| Async cmd_27 only | 28-32 | +25-40% | Track 1 (partial) | ⏳ Planned |
-| Full async commands | 35-40 | +46-67% | Track 1 | ⏳ Planned |
-| + Command batching | 38-45 | +58-88% | Track 1+2 | ⏳ Planned |
-| + Pipeline overlap | 45-55 | +88-130% | Track 1+2+3 | ⏳ Planned |
-| + Work offload | 48-60 | +100-150% | Track 1+2+3+4 | ⏳ Planned |
+| Async cmd_27 (B-003) | ~20-24 | ~0% (68K still saturated) | Track 1 | ✅ Done |
+| Single-shot cmd $22/$25 (B-004/B-005) | ~20-24 | ~0% (3.1% overhead only) | Track 1+2 | ✅ Done |
+| + Pipeline overlap | TBD | TBD | Track 3 | ⏳ Planned |
+| + Work offload to Master SH2 | TBD | TBD (highest potential) | Track 4 | ⏳ Planned |
 | **Target** | **60+** | **+150%+** | All | ⏳ Goal |
+
+> **Note (2026-03-03):** B-003/B-004/B-005 reduced command overhead from ~12,000 to ~3,850 cycles/frame, but FPS is unchanged because 68K is 100% utilized on non-command work. Real FPS gains require offloading 68K work to the idle Master SH2 (0% utilization).
 
 ### Validation Criteria
 
@@ -679,12 +668,9 @@ python3 analyze_pc_profile.py profile.csv
 | CMDINT timing issues | Medium | CMDINT is level-triggered, reliable |
 | Master SH2 queue overhead exceeds savings | Low | Master is 0% utilized, has massive headroom |
 
-### Track 2 Risks (Batching)
+### Track 2 Risks (Batching) — RESOLVED
 
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| Batch order matters for rendering | Medium | Preserve original command ordering |
-| SDRAM bandwidth contention | Low | Batch reads are burst-friendly |
+Track 2 risks are moot — batch approach was abandoned. Single-shot protocol (B-005) has no ordering or contention risks.
 
 ### Track 3 Risks (Pipeline Overlap)
 

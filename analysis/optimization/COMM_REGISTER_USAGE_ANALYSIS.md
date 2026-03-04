@@ -1,8 +1,8 @@
 # COMM Register Usage Analysis - Async Safety Validation
 
-**Date:** 2026-01-27
-**Purpose:** Document COMM register usage for async command optimization safety
-**Status:** Critical Pre-Implementation Check #2 Complete
+**Date:** 2026-01-27 (updated 2026-03-03)
+**Purpose:** Document COMM register usage for command optimization safety
+**Status:** Historical analysis — Phase 1A async approach **superseded** by B-003/B-004/B-005 single-shot protocols
 
 ---
 
@@ -23,116 +23,67 @@
 
 ---
 
-## COMM Register Usage in Blocking Functions
+## COMM Register Usage in Command Functions
 
-### Function: sh2_send_cmd_wait ($00E316)
+### Function: sh2_send_cmd_wait ($00E316) — B-005 Single-Shot (Mar 2026)
 
-**Assembly Code:**
+> **Update (B-005):** The original 3-phase protocol (COMM4 write → COMM6 handshake → COMM4 write → COMM6 handshake) has been replaced with a single-shot protocol. `sh2_wait_response` ($E342) no longer exists.
+
+**Current Assembly (B-005):**
 ```asm
 sh2_send_cmd_wait:
-    ; Wait for SH2 ready
-    TST.B   COMM0           ; $00A15120 - Test if SH2 ready for command
-    BNE.S   sh2_send_cmd_wait  ; Loop until ready (blocking!)
-
-    ; Transform address to SH2 space
-    ADDA.L  #$02000000,A0   ; Convert 68K addr → SH2 addr
-
-    ; Submit command
-    MOVE.L  A0,COMM4        ; $00A15128 - Write parameter pointer
-    MOVE.W  #$0101,COMM6    ; $00A1512C - Signal SH2 (command ready)
-
-    ; Continue to sh2_wait_response (falls through)
-```
-
-**COMM Registers Used:**
-- **COMM0** (read-only) - Polled for SH2 ready status
-- **COMM4** (write) - Parameter pointer passed to SH2
-- **COMM6** (write) - Handshake signal to SH2
-
-**Blocking Behavior:**
-- Tight spin loop on COMM0 until cleared by SH2
-- Estimated 200-400 cycles per wait
-
----
-
-### Function: sh2_wait_response ($00E342)
-
-**Assembly Code:**
-```asm
-sh2_wait_response:
-    ; Wait for SH2 completion
-    TST.B   COMM6           ; $00A1512C - Test if SH2 completed
-    BNE.S   sh2_wait_response  ; Loop until complete (blocking!)
-
-    ; Acknowledge completion
-    MOVE.L  A1,COMM4        ; $00A15128 - Write secondary parameter
-    MOVE.W  #$0101,COMM6    ; $00A1512C - Acknowledge completion
-
+.wait_ready:
+    TST.B   COMM0_HI            ; Wait for Master SH2 idle
+    BNE.S   .wait_ready
+    ADDA.L  #$02000000,A0       ; Convert to SH2 SDRAM address
+    MOVE.L  A0,COMM3            ; COMM3:4 = source pointer
+    MOVE.L  A1,COMM5            ; COMM5:6 = dest pointer
+    MOVE.B  #$25,COMM0_LO       ; Dispatch index
+    MOVE.B  #$01,COMM0_HI       ; Trigger (written LAST)
+.wait_consumed:
+    TST.B   COMM0_LO            ; Wait for SH2 to read params
+    BNE.S   .wait_consumed
     RTS
 ```
 
 **COMM Registers Used:**
-- **COMM6** (read) - Polled for SH2 completion signal
-- **COMM4** (write) - Secondary parameter or acknowledgment
-- **COMM6** (write) - Acknowledgment signal
+- **COMM0_HI** (read/write) - Polled for ready; written $01 as trigger
+- **COMM0_LO** (write/read) - Dispatch index $25; polled for params-consumed handshake
+- **COMM3:4** (write) - Source pointer A0 ($02xxxxxx SDRAM cache-through)
+- **COMM5:6** (write) - Dest pointer A1 (full SH2 address, e.g. $0601xxxx)
+- **COMM2_HI** - **NEVER WRITTEN** (Slave polls this for work commands)
 
 **Blocking Behavior:**
-- Tight spin loop on COMM6 until cleared by SH2
-- Estimated 150-300 cycles per wait
+- Wait COMM0_HI==0 (SH2 idle): ~20-50 cycles (scene init only, SH2 not busy)
+- Wait COMM0_LO==0 (params consumed): ~30-60 cycles (SH2 reads immediately)
+- Total: ~100 cycles per call (was ~350 with 3-phase)
+- 8 calls during scene init only (not per-frame)
+
+---
+
+### Function: sh2_wait_response ($00E342) — **REMOVED (B-005)**
+
+> **Removed in B-005 (Mar 2026).** The address slot $E342-$E358 is now NOP padding. The function previously polled COMM6 for the second phase of the 3-phase cmd $25 handshake. With B-005's single-shot protocol, all parameters are passed at once and no second handshake is needed.
 
 ---
 
 ## COMM Register Reuse Analysis
 
-### Per-Frame COMM Slot Usage
+> **Update (B-003/B-004/B-005):** The original analysis below described the pre-optimization state where all 3 command functions used the same COMM4+COMM6 pattern. B-003/B-004/B-005 replaced these with dedicated COMM layouts per command type, making the reuse collision analysis historical. The "Phase 1A async" approach was **never implemented** — single-shot protocols achieved the same goal more simply.
 
-Based on the 17 call sites of `sh2_send_cmd_wait`, all use the SAME COMM registers:
+### Current COMM Usage by Command (Post-Optimization)
 
-```
-Call 1:  COMM0 (poll) → COMM4 (write) → COMM6 (write)
-Call 2:  COMM0 (poll) → COMM4 (write) → COMM6 (write)
-...
-Call 17: COMM0 (poll) → COMM4 (write) → COMM6 (write)
-```
+| Command | Function | COMM Registers | Calls |
+|---------|----------|---------------|-------|
+| cmd $27 (B-003) | `sh2_cmd_27` | COMM2-6 (write), COMM7 (doorbell) | 21/frame |
+| cmd $22 (B-004) | `sh2_send_cmd` | COMM0 (trigger+index), COMM2-6 (params) | 14/frame |
+| cmd $25 (B-005) | `sh2_send_cmd_wait` | COMM0 (trigger+index), COMM3-6 (params) | 8/scene init |
 
-**CRITICAL FINDING: COMM REGISTER REUSE COLLISION**
+Each command now uses the **params-consumed handshake** (COMM0_LO cleared by SH2 after reading) to prevent COMM overwrite. No COMM6 polling loops remain.
 
-All 17 command submissions PER FRAME reuse the SAME COMM registers:
-- COMM0 for ready polling
-- COMM4 for parameter passing
-- COMM6 for handshake
+### Historical: Original Per-Frame COMM Slot Reuse (Pre-B-003/B-004/B-005)
 
-**Why This Works Currently (Blocking Model):**
-Each command submission WAITS for SH2 completion before proceeding. Sequence:
-```
-68K: Write COMM4 + COMM6 (command 1)
-68K: Block waiting on COMM0/COMM6
-SH2: Process command 1, clear COMM6
-68K: Unblock, write COMM4 + COMM6 (command 2)
-68K: Block waiting on COMM0/COMM6
-SH2: Process command 2, clear COMM6
-... (repeat 17 times)
-```
-
-**Why This BREAKS With Naive Async:**
-Without blocking, multiple commands could overwrite COMM registers before SH2 reads them:
-```
-68K: Write COMM4 + COMM6 (command 1)  ← Parameters for cmd 1
-68K: Return immediately (async)
-68K: Write COMM4 + COMM6 (command 2)  ← OVERWRITES cmd 1 parameters!
-SH2: Process command with corrupted parameters
-```
-
-**Async Safety Requirement:**
-- **Option A:** Queue commands in 68K RAM, submit one at a time (single-slot pending queue)
-- **Option B:** Use different COMM register pairs for different command types (requires SH2 code changes)
-- **Option C:** Batch all commands, submit buffer pointer once per frame
-
-**Phase 1A Recommendation: Option A (Single-Slot Queue)**
-- Simplest to implement
-- No SH2 code changes required
-- Falls back to blocking if SH2 busy
-- See [ASYNC_PHASE1A_SAFETY_CHECKLIST.md](ASYNC_PHASE1A_SAFETY_CHECKLIST.md) for implementation
+The original code used a single pattern for all commands: COMM0 (poll) → COMM4 (param) → COMM6 (handshake), with a second COMM6 poll + COMM4 write phase for `sh2_send_cmd_wait`. All calls shared the same registers sequentially, relying on blocking to prevent corruption. This was safe but slow (~350 cycles per call for cmd $25, ~300 for cmd $22).
 
 ---
 
@@ -224,107 +175,72 @@ BEQ     branch_target           ; ← Immediate conditional
 
 ---
 
-## Phase 1A Async Strategy
+## Phase 1A Async Strategy — **SUPERSEDED**
 
-### Target: 15 Safe Call Sites
+> **Not implemented.** B-003/B-004/B-005 achieved the same savings via single-shot protocols instead of async queuing. The call site analysis below is preserved for reference.
 
-**Implementation:**
-1. Replace `sh2_send_cmd_wait` with `sh2_send_cmd_async` (15 sites)
-2. Keep 2 unsafe sites calling original blocking function
-3. Add single-slot pending queue to prevent COMM reuse
-4. Add frame-end sync point to ensure completion
+### Original Target: 15 Safe Call Sites (of `sh2_send_cmd_wait`)
 
-**Addresses of Safe Call Sites:**
-```
-$00FF32, $00FF42, $00FF64, $00FF86, $00FF96
-$00FFA6, $00FFB6, $00FFC6, $010B0C, $010B1C
-$010B48, $010B58, $010B68, $010BF4, $010C04
-```
-
-**Addresses of Unsafe Call Sites (Keep Blocking):**
-```
-$010B2C  - Tests bit 4 of $FFFFC80E immediately after
-$010BAE  - Tests bit 5 of $FFFFC80E with polling loop
-```
+The 15 "safe" call sites and 2 "unsafe" call sites were identified correctly, but the optimization took a different path: converting the command protocol itself (single-shot) rather than making the call pattern async.
 
 ---
 
-## Expected Performance Impact
+## Performance Impact — Actual Results (B-003/B-004/B-005)
 
-### Current (Blocking Model)
+### Before (Original Blocking Model)
 
-**Per-frame overhead:**
 ```
-17 calls × 200-400 cycles (COMM0 wait) = 3,400-6,800 cycles
-17 calls × 150-300 cycles (COMM6 wait) = 2,550-5,100 cycles
-────────────────────────────────────────────────────────────
-Total blocking overhead:                  5,950-11,900 cycles
-Percentage of 68K budget:                 4.7-9.3%
-Time equivalent:                          0.78-1.55 ms
-```
-
-### After Phase 1A (15 Async + 2 Blocking)
-
-**Per-frame overhead:**
-```
-15 calls × 0 cycles (async, no wait)     = 0 cycles
-2 calls × 350-700 cycles (blocking)      = 700-1,400 cycles
-────────────────────────────────────────────────────────────
-Total blocking overhead:                  700-1,400 cycles
-Savings:                                  5,250-10,500 cycles (88%)
-Time equivalent saved:                    0.68-1.37 ms
+sh2_cmd_27:        21 calls/frame × ~250 cycles = ~5,250 cycles (2 blocking loops)
+sh2_send_cmd:      14 calls/frame × ~300 cycles = ~4,200 cycles (3 blocking loops)
+sh2_send_cmd_wait:  8 calls/init  × ~350 cycles = ~2,800 cycles (3-phase, scene init only)
+────────────────────────────────────────────────────────────────────────────
+Total per-frame:                                   ~9,450 cycles (~7.4% of 68K budget)
+Total per-init:                                    ~2,800 cycles additional
 ```
 
-**Expected FPS improvement:**
-- Current frame time: ~42 ms (24 FPS)
-- Time saved: 0.68-1.37 ms
-- New frame time: 40.6-41.3 ms
-- Expected FPS: 24.2-24.6 (+0.8-2.5%)
+### After (B-003 + B-004 + B-005)
 
-**Note:** This is conservative. Actual gains may be higher if:
-- SH2 processing overlaps with 68K work
-- Other blocking sources are also reduced
-- Frame-boundary sync is more efficient than per-command sync
+```
+sh2_cmd_27 (B-003):  21 calls/frame × ~50 cycles  = ~1,050 cycles (fire-and-forget)
+sh2_send_cmd (B-004): 14 calls/frame × ~170 cycles = ~2,380 cycles (single-shot)
+sh2_send_cmd_wait (B-005): 8 calls/init × ~100 cycles = ~800 cycles (single-shot)
+────────────────────────────────────────────────────────────────────────────
+Total per-frame:                                      ~3,430 cycles (~2.7% of 68K budget)
+Total per-init:                                       ~800 cycles additional
+Savings per frame:                                    ~6,020 cycles (64%)
+```
+
+**FPS impact:** ~0% measurable. The 68K is saturated on non-command work (game logic, rendering). Reducing command overhead from 7.4% to 2.7% frees ~6,000 cycles but these are absorbed by existing bottlenecks. Scene transitions are ~2,000 cycles faster.
 
 ---
 
-## Validation Checklist
+## Validation Status
 
-### Pre-Implementation
+### Analysis (Complete)
 
-- [x] **COMM register usage documented** (COMM0, COMM4, COMM6 for all calls)
-- [x] **COMM reuse collision identified** (all 17 calls use same registers)
-- [x] **Single-slot queue required** (prevents parameter corruption)
-- [x] **Unsafe call sites identified** (2 sites with RAM status checks)
-- [x] **Safe call sites enumerated** (15 sites ready for async)
+- [x] **COMM register usage documented** (COMM0, COMM4, COMM6 for all original calls)
+- [x] **COMM reuse collision identified** (all calls shared same registers)
+- [x] **Unsafe call sites identified** (2 sites with $FFFFC80E RAM status checks)
+- [x] **Safe call sites enumerated** (15 sites)
 
-### Implementation Required
+### Implementation (B-003/B-004/B-005 — Complete)
 
-- [ ] Implement single-slot pending queue (fallback to blocking if full)
-- [ ] Create `sh2_send_cmd_async` function (returns immediately)
-- [ ] Create `sh2_wait_frame_complete` function (sync at frame boundary)
-- [ ] Redirect 15 safe call sites to async path
-- [ ] Keep 2 unsafe sites calling original blocking function
-- [ ] Add instrumentation (cycle counters, overflow detection)
-
-### Post-Implementation Validation
-
-- [ ] Verify no COMM register corruption (parameter integrity)
-- [ ] Verify no visual artifacts (frame-by-frame comparison)
-- [ ] Verify FPS improvement ≥0.5% (measurable gain)
-- [ ] Verify async overflow count = 0 (no SH2 busy collisions)
-- [ ] Stress test 30+ minutes (stability)
+- [x] **B-003:** `sh2_cmd_27` → fire-and-forget via COMM7 doorbell (Feb 2026)
+- [x] **B-004:** `sh2_send_cmd` → single-shot via COMM0+COMM2-6 (Feb 2026)
+- [x] **B-005:** `sh2_send_cmd_wait` → single-shot via COMM0+COMM3-6 (Mar 2026)
+- [x] **`sh2_wait_response` removed** — address slot overwritten by B-005 NOP padding
+- [x] **3600-frame autoplay test passed** (menus + race, no crash)
 
 ---
 
 ## Related Documents
 
-- [ASYNC_PHASE1A_SAFETY_CHECKLIST.md](ASYNC_PHASE1A_SAFETY_CHECKLIST.md) - Implementation safety checks
-- [ASYNC_COMMAND_IMPLEMENTATION_PLAN.md](ASYNC_COMMAND_IMPLEMENTATION_PLAN.md) - Full implementation plan
+- [ASYNC_PHASE1A_SAFETY_CHECKLIST.md](ASYNC_PHASE1A_SAFETY_CHECKLIST.md) - Historical: Phase 1A async safety checks (not implemented)
+- [ASYNC_COMMAND_IMPLEMENTATION_PLAN.md](ASYNC_COMMAND_IMPLEMENTATION_PLAN.md) - Historical: Full async implementation plan (superseded by single-shot)
 - [68K_BOTTLENECK_ANALYSIS.md](../profiling/68K_BOTTLENECK_ANALYSIS.md) - Bottleneck identification
+- [68K_SH2_COMMUNICATION.md](../68K_SH2_COMMUNICATION.md) - Current protocol reference (B-003/B-004/B-005 sections)
 
 ---
 
-**Status:** ✅ Critical Check #2 Complete - COMM register reuse collision documented
-**Next Action:** Run Critical Check #3 (Frame timeline mapping)
-**Risk Level:** MEDIUM (single-slot queue required to prevent corruption)
+**Status:** ✅ Analysis complete. Optimization delivered via B-003/B-004/B-005 (single-shot protocols, not async queuing).
+**Result:** Per-frame command overhead reduced from ~9,450 to ~3,430 cycles (64% reduction). No FPS gain (68K saturated on non-command work).

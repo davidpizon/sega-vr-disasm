@@ -1,8 +1,15 @@
 # Batch Copy Command Design (Option A2)
 
 **Date:** 2026-01-29
-**Status:** Design Phase
+**Status:** OBSOLETE (2026-03-03)
 **Target:** Reduce 68K blocking waits in 8-call sequence ($00FF12-$00FF9E)
+
+> **OBSOLETE:** This design is invalidated by three findings:
+> 1. **SH2 cannot access Work RAM.** The proposed batch table at $FFF000 (SH2 $0220F000) is unmapped space. Proven broken in B-003 v1-v3.
+> 2. **B-003/B-004/B-005 already captured most savings.** Per-frame command overhead is ~4,000 cycles (3.1% of 68K), down from ~12,000+. The "+10-20% FPS" estimate is obsolete.
+> 3. **The 8-call target (`sh2_send_cmd_wait`) only runs during scene init**, not per frame. B-005 converted it to single-shot protocol instead.
+>
+> The $300500 expansion ROM slot is now used by `cmd25_single_shot` (B-005).
 
 ---
 

@@ -73,10 +73,10 @@ See `analysis/68K_SH2_COMMUNICATION.md` for validated COMM usage and v2.3 protoc
 | $00E22C | `sh2_graphics_cmd` | Graphics command to SH2 (14 calls) |
 | $00E2E4 | `sh2_copy_routine` | SH2 memory copy (7 calls) |
 | $00E2F0 | `sh2_load_data` | Data load via SH2 (10 calls) |
-| $00E316 | `sh2_send_cmd_wait` | Wait for ready, send command |
-| $00E342 | `sh2_wait_response` | Wait for SH2 response |
-| $00E35A | `sh2_send_cmd` | Direct command send |
-| $00E3B4 | `sh2_cmd_27` | SH2 command $27 submit (21 calls, 2 inline loops) |
+| $00E316 | `sh2_send_cmd_wait` | **B-005:** Single-shot cmd $25 (8 calls, scene init; was 3-phase COMM6) |
+| $00E342 | ~~`sh2_wait_response`~~ | **REMOVED (B-005):** Slot overwritten by NOP padding |
+| $00E35A | `sh2_send_cmd` | **B-004:** Single-shot cmd $22 (14 calls/frame; was 3 blocking loops) |
+| $00E3B4 | `sh2_cmd_27` | **B-003:** Fire-and-forget via COMM7 doorbell (21 calls/frame) |
 | $00E406 | `sh2_cmd_2F` | SH2 extended command $2F (3 inline loops, 4 params) |
 | $00203A | `sh2_frame_sync` | SH2 frame sync wrapper |
 | $0027DA | `sh2_framebuffer_prep` | 32X adapter framebuffer prep |
