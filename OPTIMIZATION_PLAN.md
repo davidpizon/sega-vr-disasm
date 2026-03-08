@@ -108,7 +108,7 @@ Each command follows a strict `submit → wait → continue` pattern:
  |-- Next command...              |
 ```
 
-**~60% of 68K cycles are wasted polling COMM registers.** This is the performance ceiling.
+**~49% of 68K cycles are V-blank sync (not COMM polling as originally assumed).** PC profiling with WRAM caller tracking (March 2026) revealed the $FF0010 hotspot is `TST.W VINT_STATE.w` — the BIOS adapter's main loop waiting for V-blank between frame iterations. The remaining ~51% is useful work, of which SH2 Cmd 27 COMM7 waits account for ~22%. Reducing useful work per game frame means fewer TV frames per game frame = higher FPS.
 
 ---
 
@@ -734,7 +734,7 @@ Items requiring empirical measurement before implementation:
 2. **68K dead code in $00E200 section** — Can we reclaim 20+ bytes for the async shim?
 3. **Frame buffer FIFO burst patterns** — Does VRD already use 4-word bursts? If not, 2.4x rasterizer speedup available.
 4. **SDRAM 16-byte alignment impact** — Do aligned data structures measurably improve burst reads?
-5. ~~**68K PC-level hotspots**~~ — RESOLVED (March 2026): WRAM COMM polling = 49.4%, SH2 Cmd 27 = 11.0%, Angle Normalization = 2.3%, depth_sort = 2.1%, Physics Integration = 1.9%. Top 10 functions = 73.1%. See `tools/libretro-profiling/README_68K_PC_PROFILING.md`.
+5. ~~**68K PC-level hotspots**~~ — RESOLVED (March 2026): WRAM 49.4% is **V-blank sync** (not COMM polling). WRAM caller tracking confirmed: callers are state dispatchers/frame orchestrators. Useful work: SH2 Cmd 27 = 21.7%, Angle Norm = 4.5%, depth_sort = 4.2%, Physics = 3.8%. Saving 33% useful work → 30 FPS. See `tools/libretro-profiling/README_68K_PC_PROFILING.md`.
 
 ---
 

@@ -58,11 +58,31 @@ python3 analyze_pc_profile.py vrd_profile_pc.csv 30
 
 **Top 10 functions = 73.1% of all 68K cycles.**
 
-### Key Finding
+### Key Finding (revised March 8, 2026)
 
-**49.4% of 68K time is spent in WRAM BIOS adapter COMM polling loops** ($FF0010 + $FF0014). These are the 32X BIOS wait loops copied to Work RAM that poll COMM registers waiting for SH2 to respond. This is the #1 optimization target — reducing SH2 round-trip time directly reduces this waste.
+**49.4% of 68K time is V-blank synchronization, NOT COMM polling.** The WRAM code at $FF0010/$FF0014 is the BIOS adapter's main loop, which polls `VINT_STATE` ($FFFFC87A) waiting for V-blank between frame iterations. WRAM caller tracking confirmed: top callers are state dispatchers and frame orchestrators, not COMM command functions.
 
-The next 11% is SH2 Cmd 27 sprite render submission. Together, **COMM waiting + command submission = 60.4%** of 68K cycles — confirming the architectural bottleneck analysis.
+The BIOS adapter main loop at $FF0000:
+```
+JSR $884CBC          ; Call game's per-frame state dispatcher
+MOVE.W #$0054,VINT_STATE.w  ; Request V-blank sync
+MOVE #$2300,SR       ; Enable interrupts
+TST.W VINT_STATE.w   ; ← 43.5% hotspot (V-blank poll)
+Bcc .poll            ; ← 5.8% hotspot (loop back)
+BRA.S MainLoop       ; Next frame
+```
+
+**Implication:** The V-blank wait is a symptom, not the cause. The game takes ~3 TV frames per game frame at 20 FPS. Reducing useful work means fewer TV frames = higher FPS. The actual useful work breakdown (excluding V-blank wait):
+
+| Function | % of Useful Work |
+|----------|-----------------|
+| SH2 Cmd 27 (COMM7 wait) | 21.7% |
+| Angle Normalization | 4.5% |
+| depth_sort | 4.2% |
+| Physics Integration | 3.8% |
+| Other (AI, trig, etc.) | ~66% |
+
+**Saving 33% of useful work → 2 TV frames/game frame → 30 FPS (+50%).**
 
 ## Implementation Details
 
