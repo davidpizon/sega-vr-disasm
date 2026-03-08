@@ -1,7 +1,7 @@
 # Virtua Racing 32X - Optimization Strategy
 
-**Status:** Revised strategic plan (v6.0 update)
-**Last Updated:** February 13, 2026
+**Status:** Revised strategic plan (v6.1 update — PC profiling data added)
+**Last Updated:** March 8, 2026
 **Baseline:** ~20-24 FPS (measured, scene-dependent)
 **Target:** 60 FPS (+150%)
 **Approach:** Data-driven, 68K-bottleneck-first
@@ -394,11 +394,18 @@ Frame N+1:                  68K prepares → SH2 renders → complete
 
 The Master SH2 is either completely idle (0% with hooks off) or lightly loaded (36% with hooks on). Meanwhile the 68K is 100% saturated. Offloading pure computation frees 68K cycles.
 
-**Candidates for offload:**
-1. **Trigonometric lookups** — 68K math functions that could run on SH2
-2. **Object sorting/culling** — Pre-processing before command submission
-3. **Physics integration** — Position/velocity updates
-4. **Collision detection** — Bounding box tests
+**Candidates for offload (ranked by PC profiling, March 2026):**
+
+| Function | 68K Share | PCs | Offloadable? |
+|----------|-----------|-----|-------------|
+| Angle Normalization | 2.3% | 24 | Yes — pure math, no side effects |
+| depth_sort | 2.1% | 11 | Maybe — already optimized (QW-4a), complex data deps |
+| Physics Integration | 1.9% | 15 | Yes — deterministic computation |
+| AI Opponent Select | 1.3% | 17 | Difficult — game state dependencies |
+| sine_cosine_quadrant_lookup | 1.0% | 9 | Yes — table lookup, easily parallelized |
+| rotational_offset_calc | 1.0% | 9 | Yes — pure math |
+
+**Combined offload potential:** ~9.6% of 68K budget (~12,300 cycles/frame)
 
 **Data flow:** 68K writes inputs to shared SDRAM → signals Master SH2 → Master SH2 computes → writes results back → 68K reads results.
 
@@ -529,7 +536,7 @@ Unlike VINT/HINT/PWMINT, the CMD interrupt is **negated when masked** and **re-a
 | `profiling_frontend` | Headless libretro frontend (frame-level profiling) | ✅ Working |
 | `picodrive_libretro.so` | Custom PicoDrive core with instrumentation | ✅ Working |
 | `analyze_profile.py` | Frame-level analysis (68K/MSH2/SSH2 cycles) | ✅ Working |
-| `analyze_pc_profile.py` | PC-level hotspot analysis | ✅ Working |
+| `analyze_pc_profile.py` | PC-level hotspot analysis + function name resolution | ✅ Working |
 
 ### Quick Start
 
@@ -552,6 +559,7 @@ python3 analyze_pc_profile.py profile.csv
 | Baseline (hooks off) | 127,987 (100.1%) | 60 (0.0%) | 306,989 (80.1%) | 2026-01-29 |
 | With hooks enabled | 127,987 (100.1%) | 139,568 (36.4%) | 299,958 (78.3%) | 2026-01-28 |
 | Delay loop eliminated | 127,987 (100.1%) | 139,567 (36.4%) | 100,157 (26.1%) | 2026-01-28 |
+| PC profiling (race avg) | 127,987 (100.1%) | 157,286 | 296,112 | 2026-03-08 |
 
 ---
 
@@ -726,7 +734,7 @@ Items requiring empirical measurement before implementation:
 2. **68K dead code in $00E200 section** — Can we reclaim 20+ bytes for the async shim?
 3. **Frame buffer FIFO burst patterns** — Does VRD already use 4-word bursts? If not, 2.4x rasterizer speedup available.
 4. **SDRAM 16-byte alignment impact** — Do aligned data structures measurably improve burst reads?
-5. **68K PC-level hotspots** — Which specific 68K addresses consume the most cycles? (guides work offload)
+5. ~~**68K PC-level hotspots**~~ — RESOLVED (March 2026): WRAM COMM polling = 49.4%, SH2 Cmd 27 = 11.0%, Angle Normalization = 2.3%, depth_sort = 2.1%, Physics Integration = 1.9%. Top 10 functions = 73.1%. See `tools/libretro-profiling/README_68K_PC_PROFILING.md`.
 
 ---
 
@@ -756,4 +764,4 @@ Items requiring empirical measurement before implementation:
 
 ---
 
-**This plan reflects profiling data from January 2026 confirming the 68K as the primary bottleneck. All priorities restructured around 68K cycle relief.**
+**This plan reflects profiling data from January 2026 (frame-level) and March 2026 (PC-level hotspots) confirming the 68K as the primary bottleneck. PC profiling shows 49.4% COMM polling + 11.0% command submission = 60.4% blocking. All priorities restructured around 68K cycle relief.**

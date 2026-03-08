@@ -6,9 +6,48 @@ Analyzes program counter-level profiling data to identify hotspots
 Output format: cpu,pc,total_cycles,count,avg_cycles,share
 """
 
+import bisect
 import csv
+import re
 import sys
 from pathlib import Path
+
+
+def load_function_map(lookup_path: str) -> tuple:
+    """Load function address→name mapping from FUNCTION_QUICK_LOOKUP.md.
+    Returns (sorted_addrs, addr_to_name) for binary search lookup."""
+    addr_to_name = {}
+    pattern = re.compile(r'^\$([0-9A-Fa-f]{6})\s+(.+?)\s+\[')
+
+    with open(lookup_path, 'r') as f:
+        for line in f:
+            m = pattern.match(line.strip())
+            if m:
+                addr = int(m.group(1), 16)
+                name = m.group(2).strip()
+                # Truncate long names for display
+                if len(name) > 40:
+                    name = name[:37] + "..."
+                addr_to_name[addr] = name
+    sorted_addrs = sorted(addr_to_name.keys())
+    return sorted_addrs, addr_to_name
+
+
+def resolve_function(pc: int, sorted_addrs: list, addr_to_name: dict) -> str:
+    """Resolve a 68K PC to its containing function name.
+    Converts 32X CPU address ($88xxxx) to ROM file offset first."""
+    # Convert 68K CPU address to ROM file offset
+    if pc >= 0x880000 and pc < 0xC80000:
+        file_offset = pc - 0x880000
+    elif pc >= 0xFF0000:
+        return "WRAM_code"  # BIOS adapter code in Work RAM
+    else:
+        file_offset = pc
+
+    idx = bisect.bisect_right(sorted_addrs, file_offset) - 1
+    if idx >= 0:
+        return addr_to_name[sorted_addrs[idx]]
+    return "???"
 
 
 def get_sh2_memory_region(pc: int) -> str:
@@ -32,13 +71,20 @@ def get_sh2_memory_region(pc: int) -> str:
 
 
 def get_68k_memory_region(pc: int) -> str:
-    """Identify 68K memory region from PC address."""
-    if pc < 0x020000:
-        return "ROM-68K"   # 68K game code
+    """Identify 68K memory region from PC address.
+    In 32X mode, ROM is mapped at $880000 in 68K address space."""
+    if pc >= 0x880000 and pc < 0x8A0000:
+        return "ROM-68K"   # 32X ROM (68K game code)
+    elif pc >= 0x8A0000 and pc < 0xB80000:
+        return "ROM-SH2"   # 32X ROM (SH2 code area)
+    elif pc >= 0xB80000 and pc < 0xC80000:
+        return "ROM-EXP"   # 32X ROM (expansion)
+    elif pc < 0x020000:
+        return "ROM-68K"   # Non-32X ROM
     elif pc < 0x300000:
-        return "ROM-SH2"   # SH2 code area (68K shouldn't be here)
+        return "ROM-SH2"   # Non-32X SH2 area
     elif pc < 0x400000:
-        return "ROM-EXP"   # Expansion ROM
+        return "ROM-EXP"   # Non-32X expansion
     elif pc >= 0xFF0000:
         return "WRAM"      # Work RAM
     elif pc >= 0xA15100 and pc < 0xA15200:
@@ -51,6 +97,13 @@ def get_68k_memory_region(pc: int) -> str:
 
 def analyze_pc_profile(csv_path: str, top_n: int = 20):
     """Analyze PC-level profiling data and show hotspots."""
+
+    # Try to load function name lookup
+    script_dir = Path(__file__).resolve().parent
+    lookup_path = script_dir / "../../analysis/FUNCTION_QUICK_LOOKUP.md"
+    sorted_addrs, addr_to_name = [], {}
+    if lookup_path.exists():
+        sorted_addrs, addr_to_name = load_function_map(str(lookup_path))
 
     m68k_samples = []
     master_samples = []
@@ -67,9 +120,11 @@ def analyze_pc_profile(csv_path: str, top_n: int = 20):
             share = float(row['share'])
 
             if cpu in ('68K', '68k', 'm68k'):
+                func = resolve_function(pc, sorted_addrs, addr_to_name) if sorted_addrs else ""
                 entry = {
                     'pc': pc,
                     'region': get_68k_memory_region(pc),
+                    'func': func,
                     'total_cycles': total_cycles,
                     'count': count,
                     'avg_cycles': avg_cycles,
@@ -102,14 +157,15 @@ def analyze_pc_profile(csv_path: str, top_n: int = 20):
 
         print(f"Total cycles: {total_68k:,}")
         print()
-        print("    PC        Region    Total Cycles    Count    Avg     Share   Cumulative")
-        print("----------  --------  --------------  --------  ------  ------  ----------")
+        print("    PC        Region    Total Cycles    Count    Avg     Share   Cumul   Function")
+        print("----------  --------  --------------  --------  ------  ------  ------  --------")
 
         cumulative = 0.0
         for entry in m68k_samples[:top_n]:
             cumulative += entry['share']
+            func_str = entry.get('func', '')
             print(f"0x{entry['pc']:08X}  {entry['region']:8s}  {entry['total_cycles']:13,}  {entry['count']:8,}  "
-                  f"{entry['avg_cycles']:6.1f}  {entry['share']:5.2f}%  {cumulative:6.2f}%")
+                  f"{entry['avg_cycles']:6.1f}  {entry['share']:5.2f}%  {cumulative:5.1f}%  {func_str}")
         print()
     else:
         print("No 68K data captured\n")
@@ -158,6 +214,32 @@ def analyze_pc_profile(csv_path: str, top_n: int = 20):
     else:
         print("No Slave SH2 data captured\n")
 
+    # Function-level aggregation for 68K
+    if m68k_samples and sorted_addrs:
+        func_agg = {}
+        for entry in m68k_samples:
+            func = entry.get('func', '???')
+            if func not in func_agg:
+                func_agg[func] = {'total_cycles': 0, 'count': 0, 'share': 0.0, 'pcs': 0}
+            func_agg[func]['total_cycles'] += entry['total_cycles']
+            func_agg[func]['count'] += entry['count']
+            func_agg[func]['share'] += entry['share']
+            func_agg[func]['pcs'] += 1
+
+        sorted_funcs = sorted(func_agg.items(), key=lambda x: x[1]['total_cycles'], reverse=True)
+
+        print(f"=== 68000 Function-Level Aggregation (Top {top_n}) ===")
+        print()
+        print("Function                                   PCs  Total Cycles     Share   Cumul")
+        print("-----------------------------------------  ---  --------------  ------  ------")
+
+        cumulative = 0.0
+        for name, data in sorted_funcs[:top_n]:
+            cumulative += data['share']
+            display_name = name[:41] if len(name) > 41 else name
+            print(f"{display_name:41s}  {data['pcs']:3d}  {data['total_cycles']:13,}  {data['share']:5.2f}%  {cumulative:5.1f}%")
+        print()
+
     # Analysis summary
     print("=== Analysis Summary ===")
 
@@ -183,9 +265,10 @@ def analyze_pc_profile(csv_path: str, top_n: int = 20):
             hotspot_file = Path(csv_path).parent / f"{cpu_name}_hotspots.txt"
             with open(hotspot_file, 'w') as f:
                 f.write(f"# {cpu_name.upper()} Hotspots - Top 20 PCs by cycle share\n")
-                f.write("# Format: PC [Region] (share%) - Use for disassembly lookup\n\n")
+                f.write("# Format: PC [Region] (share%) function_name\n\n")
                 for i, entry in enumerate(samples[:20], 1):
-                    f.write(f"{i:2d}. 0x{entry['pc']:08X} [{entry['region']:8s}] ({entry['share']:5.2f}%)\n")
+                    func_str = entry.get('func', '')
+                    f.write(f"{i:2d}. 0x{entry['pc']:08X} [{entry['region']:8s}] ({entry['share']:5.2f}%) {func_str}\n")
             print(f"{cpu_name.upper()} hotspots exported to: {hotspot_file}")
 
 
