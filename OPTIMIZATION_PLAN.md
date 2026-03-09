@@ -443,7 +443,26 @@ Both read/write entity data in 68K Work RAM ($FFxxxx), which SH2 cannot access. 
 4. 68K reads results back from SDRAM
 Combined: 4.8% of useful 68K work.
 
-**Implementation order:** Tier 1 first (angle_normalize → sine_cosine), then Tier 2 if additional gains needed.
+#### COMM Offload Cost Model (Learned March 2026)
+
+**Synchronous COMM offload of `angle_normalize` was attempted and reverted.** The function runs ~8×/frame during race mode. Each call requires a full COMM handshake: wait COMM0_HI==0, write 7 registers, trigger, wait completion, read 4 registers. Profiling showed:
+
+- **`.wait_idle` (wait for prior cmd):** 22.9% of total 68K time — the SH2 was busy finishing `sh2_send_cmd` data copies
+- **`.wait_done` (wait for BSP result):** 0.7% — the BSP math itself is fast on SH2
+- **Net effect:** +23% 68K overhead vs ~1.2% saved. **25% slower**, not faster.
+
+**Root cause:** All COMM commands share COMM0_HI as a global busy flag. Each `angle_normalize` call must wait for any prior COMM command (cmd $22/$25/$27) to finish before it can even send its parameters. The synchronous handshake serializes all COMM traffic.
+
+**Offload viability rule:** `computation_cycles >> handshake_overhead × call_count`. For the COMM protocol, handshake overhead is ~200-500 68K cycles per round-trip (polling + register writes + reads). A function must save **thousands** of 68K cycles per call to break even. Small pure-math functions called frequently are **anti-candidates**.
+
+**What works instead:**
+- Functions with **large per-call cost** (bulk copies like cmd $22: thousands of cycles per call)
+- **Batched** offload (send N inputs, wait once, read N results — amortizes handshake)
+- **Async/pipelined** offload (fire-and-forget, collect results later — but requires caller restructuring)
+
+**SH2 infrastructure preserved:** cmd $30 handler at $02301178, jump table entry patched. Dormant until a batching or async approach is implemented.
+
+**Implementation order:** Batch or async approach required. Individual synchronous offload of small functions is not viable. Consider batching all 8 angle_normalize calls into a single COMM command, or focus on Tier 2 functions where per-call computation is larger.
 
 ---
 
