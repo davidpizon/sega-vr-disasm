@@ -134,7 +134,7 @@ Latest PicoDrive build is broken, preventing:
 
 **Test Plan:**
 1. Profile baseline ROM (v3.0 without parallel processing)
-2. Measure known hotspots (func_021, func_016)
+2. Measure known hotspots (vertex_transform, coord_transform)
 3. Verify COMM protocol timing
 4. Document profiling workflow
 
@@ -196,7 +196,7 @@ func_in_expansion:
 ```asm
 ; In main ROM, create function table:
 expansion_funcs:
-    dc.l    $02300000    ; func_021_optimized
+    dc.l    $02300000    ; vertex_transform_optimized
     dc.l    $02300100    ; slave_work_wrapper
     dc.l    $02300200    ; other_func
 
@@ -275,13 +275,13 @@ test_passed:
 **Steps:**
 
 1. **Relocate functions** from main ROM to expansion ROM:
-   - `func_021_optimized` → $300100
+   - `vertex_transform_optimized` → $300100
    - `slave_work_wrapper` → $300200
    - `slave_test_func` → $300280
    - Other parallel processing code
 
 2. **Update call sites** to use trampolines:
-   - `func_021` trampoline → calls expansion ROM version
+   - `vertex_transform` trampoline → calls expansion ROM version
    - Slave dispatch → calls expansion ROM work wrapper
 
 3. **Update memory map documentation**:
@@ -292,7 +292,7 @@ test_passed:
    $300040-$30004F   Reserved
    $300050-$30007B   master_dispatch_hook (44B)
    $300080-$3000FF   Trampoline infrastructure
-   $300100-$30015F   func_021_optimized (96B)
+   $300100-$30015F   vertex_transform_optimized (96B)
    $300200-$30024B   slave_work_wrapper (76B)
    $300280-$3002AB   slave_test_func (44B)
    $3002AC-$3FFFFF   Available (1MB - 684 bytes)
@@ -374,7 +374,7 @@ test_passed:
        MOV.L   @(SH2_FREE_RUNNING_TIMER),R0  ; Start time
        MOV.L   R0,@(timer_start)
 
-       ; ... actual work (func_021_optimized) ...
+       ; ... actual work (vertex_transform_optimized) ...
 
        MOV.L   @(SH2_FREE_RUNNING_TIMER),R0  ; End time
        MOV.L   R0,@(timer_end)
@@ -489,7 +489,7 @@ test_passed:
    MOV.L   #$CAFEBABE,R7
    MOV.L   #$12345678,R8
    MOV.L   #$ABCDEF00,R5
-   BSR     func_021_trampoline
+   BSR     vertex_transform_trampoline
    ```
 
 2. **Slave validates values**:
@@ -542,20 +542,20 @@ v4.0 infrastructure is complete, timing validated, but parallel processing still
 **Goal:** Enable parallel processing in actual game execution
 
 **Current State:**
-- func_021 trampoline captures params but doesn't redirect
-- Master still executes func_021 directly (blocking)
+- vertex_transform trampoline captures params but doesn't redirect
+- Master still executes vertex_transform directly (blocking)
 - Slave receives signal but work is redundant
 
 **Target State:**
-- func_021 trampoline captures params and returns immediately
-- Master does NOT execute func_021 (delegates to Slave)
-- Slave executes func_021_optimized in parallel
+- vertex_transform trampoline captures params and returns immediately
+- Master does NOT execute vertex_transform (delegates to Slave)
+- Slave executes vertex_transform_optimized in parallel
 
 **Implementation:**
 
-1. **Update func_021 trampoline** (at $0234C8):
+1. **Update vertex_transform trampoline** (at $0234C8):
    ```asm
-   func_021:
+   vertex_transform:
        ; Capture parameters
        MOV.L   R14,@($2203E000)
        MOV.L   R7,@($2203E004)
@@ -565,7 +565,7 @@ v4.0 infrastructure is complete, timing validated, but parallel processing still
        ; Signal Slave
        MOV.W   #$16,@COMM7
 
-       ; CRITICAL CHANGE: Return immediately (was: continue to func_021 body)
+       ; CRITICAL CHANGE: Return immediately (was: continue to vertex_transform body)
        RTS
        NOP
    ```
@@ -728,11 +728,11 @@ Maximize performance gains from parallel processing through targeted optimizatio
 
 1. **Profile Master SH2**:
    - Where is time spent now?
-   - New hotspots after offloading func_021?
+   - New hotspots after offloading vertex_transform?
    - Synchronization overhead?
 
 2. **Profile Slave SH2**:
-   - Is func_021_optimized optimal?
+   - Is vertex_transform_optimized optimal?
    - Cache misses?
    - Memory access patterns?
 
@@ -753,13 +753,13 @@ Maximize performance gains from parallel processing through targeted optimizatio
 **Goal:** Distribute work optimally between Master and Slave
 
 **Current State:**
-- func_021 vertex transforms → Slave
+- vertex_transform vertex transforms → Slave
 - Everything else → Master
 
 **Optimization Opportunities:**
 
 1. **Parallelize more functions**:
-   - func_016 (if not already inlined in func_021_optimized)
+   - coord_transform (if not already inlined in vertex_transform_optimized)
    - Other 3D pipeline stages
    - Physics calculations
    - Collision detection
@@ -951,7 +951,7 @@ Maximize performance gains from parallel processing through targeted optimizatio
 
 ### Phase 3
 
-1. What is actual Slave execution time for func_021_optimized?
+1. What is actual Slave execution time for vertex_transform_optimized?
 2. Does Slave meet frame budget with margin?
 3. Which synchronization protocol: simple flag, double-buffer, or queue?
 

@@ -36,19 +36,19 @@ Total Functions: 109
 
 ## Critical Functions (Hotspots)
 
-### func_016 ⭐⭐⭐ HOTTEST
+### coord_transform ⭐⭐⭐ HOTTEST
 
 **Address**: 0x0222335A - 0x02223386
 **Size**: 44 bytes (~22 instructions)
 **Type**: Leaf function (no outgoing calls)
-**Called By**: func_017, func_018 (2×), func_019
+**Called By**: quad_helper, quad_batch_short (2×), quad_batch_alt_short
 **Call Count**: 4
 
 **Purpose**: Coordinate transformation or clipping utility
 
 **Pseudo-code**:
 ```c
-void func_016(Context* r14) {
+void coord_transform(Context* r14) {
     int32_t r1 = r14->field_0x1C;
     int32_t r2 = r14->field_0x20;
     r1 = (r1 << 16);  // SHLL16
@@ -74,11 +74,11 @@ void func_016(Context* r14) {
 
 **OPT**: Function is small enough to inline completely.
 
-**v4.0 Status**: 📋 **Code ready** - Inlined in func_021_optimized at $300100 (infrastructure complete, not yet activated)
+**v4.0 Status**: 📋 **Code ready** - Inlined in vertex_transform_optimized at $300100 (infrastructure complete, not yet activated)
 
 ---
 
-### func_065 ⭐⭐⭐ HOTTEST
+### unrolled_data_copy ⭐⭐⭐ HOTTEST
 
 **Address**: 0x02223F2C - 0x02223FC2
 **Size**: 150 bytes (~75 instructions)
@@ -99,20 +99,20 @@ void func_016(Context* r14) {
 
 ---
 
-### func_020 ⭐⭐ HOT
+### vertex_helper_short ⭐⭐ HOT
 
 **Address**: 0x02223468 - 0x022234BE
 **Size**: 86 bytes
 **Type**: Coordinator (recursive)
-**Called By**: func_018, func_019, func_020 (self)
+**Called By**: quad_batch_short, quad_batch_alt_short, vertex_helper_short (self)
 **Call Count**: 3
-**Translation**: `disasm/modules/sh2/3d-engine/func_020_recursive_quad.asm`, `func_020_vertex_helper_short.asm`
+**Translation**: `disasm/modules/sh2/3d-engine/vertex_helper_short_recursive_quad.asm`, `vertex_helper_short.asm`
 
 **Purpose**: Recursive polygon subdivision or hierarchical processing
 
 **Characteristics**:
 - Self-recursive (calls itself)
-- Calls func_023 for leaf processing
+- Calls frustum_cull_short for leaf processing
 - Likely implements divide-and-conquer algorithm
 
 **Optimization**: Consider iteration instead of recursion to reduce stack overhead.
@@ -121,14 +121,14 @@ void func_016(Context* r14) {
 
 ---
 
-### func_023 ⭐⭐⭐ LARGEST STANDALONE FUNCTION
+### frustum_cull_short ⭐⭐⭐ LARGEST STANDALONE FUNCTION
 
 **Address**: 0x02223508 - 0x022235F5
 **Size**: 238 bytes (largest single function in 3D engine)
 **Type**: Coordinator (visibility hub)
-**Called By**: func_020, func_021
-**Calls**: func_024, func_026, func_029, func_032, func_033, func_036
-**Translation**: `disasm/modules/sh2/3d-engine/func_023_frustum_cull.asm`, `func_023_frustum_cull_short.asm`
+**Called By**: vertex_helper_short, vertex_transform
+**Calls**: screen_coords_short, bounds_compare_short, func_029, scanline_setup, render_quad_short, render_dispatch_short
+**Translation**: `disasm/modules/sh2/3d-engine/frustum_cull_short_frustum_cull.asm`, `frustum_cull_short.asm`
 
 **Purpose**: Core visibility testing and rendering dispatch hub - the heart of the 3D engine
 
@@ -157,25 +157,25 @@ BF .occluded
 
 ---
 
-### func_021 ⭐⭐⭐ INFRASTRUCTURE READY FOR SLAVE OFFLOAD (v4.0)
+### vertex_transform ⭐⭐⭐ INFRASTRUCTURE READY FOR SLAVE OFFLOAD (v4.0)
 
 **Address**: 0x022234C8 (original implementation at baseline)
 **Size**: Original ~36 bytes (current state), Optimized 96 bytes (ready at $300100)
 **Type**: Coordinator → **Infrastructure ready for Slave offload**
 **Called By**: Command handler for cmd 0x16
-**Calls**: func_016 (currently uses JSR, inlined in optimized version)
+**Calls**: coord_transform (currently uses JSR, inlined in optimized version)
 
 **Purpose**: Vertex coordinate transformation with culling
 
 **v4.0 Status**: 📋 **INFRASTRUCTURE READY, NOT YET ACTIVATED**
 
 **Current state** (v4.0-baseline):
-- Original func_021 implementation active at $0234C8
+- Original vertex_transform implementation active at $0234C8
 - Slave SH2 remains in idle loop (does not participate in rendering)
 - Master SH2 executes all transform work sequentially
 
 **Infrastructure ready for activation**:
-- ✅ `func_021_optimized` at $300100 - Optimized version with func_016 inlined (96 bytes)
+- ✅ `vertex_transform_optimized` at $300100 - Optimized version with coord_transform inlined (96 bytes)
 - ✅ Parameter block design at 0x2203E000 (cache-through SDRAM for coherency)
 - ✅ `slave_work_wrapper` at $300200 - COMM7 polling loop ready
 - ⏳ **Not yet connected** - Requires trampoline at $0234C8 + Slave PC redirect
@@ -196,8 +196,8 @@ BF .occluded
 | +0x08 | R8 | Data pointer |
 | +0x0C | R5 | Output pointer |
 
-**Optimized Version** (`func_021_optimized` at $300100 - ready but not active):
-- func_016 fully inlined (eliminates JSR/RTS overhead)
+**Optimized Version** (`vertex_transform_optimized` at $300100 - ready but not active):
+- coord_transform fully inlined (eliminates JSR/RTS overhead)
 - 96 bytes total
 - Designed to run on Slave SH2 in parallel with Master
 - Expected 15-20% performance improvement when activated
@@ -208,7 +208,7 @@ BF .occluded
 
 ## Entry Point Functions
 
-### func_000
+### data_copy
 
 **Address**: 0x0222300A - 0x0222301A
 **Size**: 18 bytes (9 instructions)
@@ -233,33 +233,33 @@ BF .occluded
 
 ---
 
-### func_001
+### main_coordinator_short
 
 **Address**: 0x0222301C - 0x02223064
 **Size**: 74 bytes
 **Type**: Coordinator
-**Calls**: func_005, func_007, func_009, func_010
+**Calls**: transform_loop, alt_transform_loop, display_list_4elem, display_list_3elem
 
 **Purpose**: Main transformation coordinator
 
 **Call Pattern**:
 ```
-func_001
-  ├─> func_005 (matrix transform setup)
-  │   ├─> func_006 (MAC.L multiply)
+main_coordinator_short
+  ├─> transform_loop (matrix transform setup)
+  │   ├─> matrix_multiply (MAC.L multiply)
   │   └─> JSR @R14 (per-vertex callback)
-  ├─> func_007 (alt transform setup)
-  │   ├─> func_008 (MAC.L multiply)
+  ├─> alt_transform_loop (alt transform setup)
+  │   ├─> alt_matrix_multiply (MAC.L multiply)
   │   └─> JSR @R14 (per-vertex callback)
-  ├─> func_009 (result processing)
-  └─> func_010 (result processing variant)
+  ├─> display_list_4elem (result processing)
+  └─> display_list_3elem (result processing variant)
 ```
 
 **Likely**: Top-level vertex transformation coordinator, called once per frame or per model.
 
 ---
 
-### func_002
+### case_handlers_short
 
 **Address**: 0x02223066 - 0x022230CA
 **Size**: 102 bytes
@@ -274,13 +274,13 @@ func_001
 
 ## Matrix Transform Functions
 
-### func_005
+### transform_loop
 
 **Address**: 0x022230E6 - 0x02223112
 **Size**: 46 bytes
 **Type**: Coordinator
-**Calls**: func_006, JSR @R14
-**Called By**: func_001
+**Calls**: matrix_multiply, JSR @R14
+**Called By**: main_coordinator_short
 
 **Purpose**: Matrix transformation setup with callback
 
@@ -296,7 +296,7 @@ func_001
 022230FE  5EE7     MOV.L   @($1C,R14),R14       ; Load callback
 02223100  4E0B     JSR     @R14                 ; Call indirect
 02223102  60D5     MOV.W   @R13+,R0             ; Load parameter (delay slot)
-02223104  B00B     BSR     func_006             ; Matrix multiply
+02223104  B00B     BSR     matrix_multiply             ; Matrix multiply
 02223106  0028     CLRMAC                       ; Clear MAC (delay slot)
 02223108  4B10     DT      R11                  ; Decrement counter
 0222310A  8FF9     BF/S    $02223102            ; Loop
@@ -307,12 +307,12 @@ func_001
 
 ---
 
-### func_006 ⭐ MAC.L Heavy
+### matrix_multiply ⭐ MAC.L Heavy
 
 **Address**: 0x02223114 - 0x02223174
 **Size**: 98 bytes
 **Type**: Leaf function (MAC.L intensive)
-**Called By**: func_005
+**Called By**: transform_loop
 
 **Purpose**: 3D vector transformation using MAC.L
 
@@ -339,43 +339,43 @@ func_001
 
 ---
 
-### func_007
+### alt_transform_loop
 
 **Address**: 0x02223176 - 0x022231A0
 **Size**: 44 bytes
 **Type**: Coordinator
-**Calls**: func_008, JSR @R14
-**Called By**: func_001
+**Calls**: alt_matrix_multiply, JSR @R14
+**Called By**: main_coordinator_short
 
-**Purpose**: Alternative transformation setup (similar to func_005)
+**Purpose**: Alternative transformation setup (similar to transform_loop)
 
-**Difference**: Calls func_008 instead of func_006, suggesting different matrix or transform type.
+**Difference**: Calls alt_matrix_multiply instead of matrix_multiply, suggesting different matrix or transform type.
 
 ---
 
-### func_008 ⭐ MAC.L Heavy
+### alt_matrix_multiply ⭐ MAC.L Heavy
 
 **Address**: 0x022231A2 - 0x022231E2
 **Size**: 66 bytes
 **Type**: Leaf function (MAC.L intensive)
-**Called By**: func_007, func_012
+**Called By**: alt_transform_loop, display_entry
 
 **Purpose**: Matrix multiplication variant
 
-**Similar to func_006** but slightly different pointer handling or matrix dimensions.
+**Similar to matrix_multiply** but slightly different pointer handling or matrix dimensions.
 
-**OPT**: Candidate for optimization (see func_006 notes).
+**OPT**: Candidate for optimization (see matrix_multiply notes).
 
 ---
 
 ## Result Processing Functions
 
-### func_009
+### display_list_4elem
 
 **Address**: 0x022231E4 - 0x02223200
 **Size**: 30 bytes
 **Type**: Leaf function
-**Called By**: func_001, func_012
+**Called By**: main_coordinator_short, display_entry
 
 **Purpose**: Pack transformation results into output buffer
 
@@ -397,45 +397,45 @@ func_001
 
 ---
 
-### func_010
+### display_list_3elem
 
 **Address**: 0x02223202 - 0x0222321A
 **Size**: 26 bytes
 **Type**: Leaf function
-**Called By**: func_001
+**Called By**: main_coordinator_short
 
 **Purpose**: Result processing variant (writes 3 longwords instead of 4)
 
-**Similar to func_009** but shorter output (12 bytes vs 16 bytes).
+**Similar to display_list_4elem** but shorter output (12 bytes vs 16 bytes).
 
 ---
 
 ## Polygon Processing Functions
 
-### func_018
+### quad_batch_short
 
 **Address**: 0x022233A2 - 0x0222340A
 **Size**: 106 bytes
 **Type**: Coordinator
-**Calls**: func_016 (hot), func_020
+**Calls**: coord_transform (hot), vertex_helper_short
 **Call Count**: Unknown (entry point)
 
 **Purpose**: Batch polygon processor
 
-**Pattern**: Loops over polygon array, calls func_016 multiple times per polygon, then calls func_020 for further processing.
+**Pattern**: Loops over polygon array, calls coord_transform multiple times per polygon, then calls vertex_helper_short for further processing.
 
 ---
 
-### func_019
+### quad_batch_alt_short
 
 **Address**: 0x0222340C - 0x02223466
 **Size**: 92 bytes
 **Type**: Coordinator
-**Calls**: func_016 (hot), func_020
+**Calls**: coord_transform (hot), vertex_helper_short
 **Call Count**: Unknown (entry point)
-**Translation**: `disasm/modules/sh2/3d-engine/func_019_quad_batch_alt.asm`, `func_019_quad_batch_alt_short.asm`
+**Translation**: `disasm/modules/sh2/3d-engine/quad_batch_alt_short_quad_batch_alt.asm`, `quad_batch_alt_short.asm`
 
-**Purpose**: Alternative polygon processing path (similar to func_018)
+**Purpose**: Alternative polygon processing path (similar to quad_batch_short)
 
 **Likely**: Different polygon type (triangles vs quads?) or rendering mode.
 
@@ -443,14 +443,14 @@ func_001
 
 ## Rasterization Functions (Newly Documented)
 
-### func_033 ⭐⭐ Quad Rendering
+### render_quad_short ⭐⭐ Quad Rendering
 
 **Address**: 0x022236FA - 0x0222375B
 **Size**: 98 bytes
 **Type**: Coordinator
-**Called By**: func_023 (visibility hub)
-**Calls**: func_034 (span filler)
-**Translation**: `disasm/modules/sh2/3d-engine/func_033_render_quad.asm`, `func_033_render_quad_short.asm`
+**Called By**: frustum_cull_short (visibility hub)
+**Calls**: span_filler_short (span filler)
+**Translation**: `disasm/modules/sh2/3d-engine/render_quad_short_render_quad.asm`, `render_quad_short.asm`
 
 **Purpose**: Renders quads by walking their edges, generating scanline data
 
@@ -472,13 +472,13 @@ BT .right_edge_first
 
 ---
 
-### func_034 ⭐⭐ Span Filler
+### span_filler_short ⭐⭐ Span Filler
 
 **Address**: 0x0222375C - 0x022237D5
 **Size**: 122 bytes
 **Type**: Leaf function
-**Called By**: func_033
-**Translation**: `disasm/modules/sh2/3d-engine/func_034_span_filler.asm`, `func_034_span_filler_short.asm`
+**Called By**: render_quad_short
+**Translation**: `disasm/modules/sh2/3d-engine/span_filler_short_span_filler.asm`, `span_filler_short.asm`
 
 **Purpose**: Calculates interpolated edge values for scanline rendering
 
@@ -493,13 +493,13 @@ BT .right_edge_first
 
 ---
 
-### func_040 ⭐ Display List Buffer Setup
+### display_list_short ⭐ Display List Buffer Setup
 
 **Address**: 0x0222385E - 0x022238D7
 **Size**: 122 bytes
 **Type**: Leaf function with jump table
 **Called By**: Display engine coordinator
-**Translation**: `disasm/modules/sh2/3d-engine/func_040_display_list_short.asm`
+**Translation**: `disasm/modules/sh2/3d-engine/display_list_short.asm`
 
 **Purpose**: Initialize display list buffers at VDP addresses
 
@@ -585,14 +585,14 @@ Index  Offset  Purpose
 
 ## Loop Processor Functions
 
-### func_011
+### display_list_loop
 
 **Address**: 0x0222321C - 0x02223266
 **Size**: 76 bytes
 **Type**: Coordinator
-**Calls**: func_012
+**Calls**: display_entry
 
-**Purpose**: Loop over data structures, calling func_012 for each element
+**Purpose**: Loop over data structures, calling display_entry for each element
 
 **Pattern**:
 ```assembly
@@ -607,16 +607,16 @@ Index  Offset  Purpose
 
 ---
 
-### func_012
+### display_entry
 
 **Address**: 0x02223268 - 0x022232C2
 **Size**: 92 bytes
 **Type**: Coordinator
-**Calls**: func_008 (MAC.L), func_009
+**Calls**: alt_matrix_multiply (MAC.L), display_list_4elem
 
 **Purpose**: Transform using matrix, pack results
 
-**Flow**: Call func_008 for transformation → Call func_009 for packing.
+**Flow**: Call alt_matrix_multiply for transformation → Call display_list_4elem for packing.
 
 ---
 
@@ -627,7 +627,7 @@ Index  Offset  Purpose
 **Address**: 0x022230CC - 0x022230DA
 **Size**: 16 bytes
 **Type**: Leaf function
-**Called By**: func_002
+**Called By**: case_handlers_short
 
 **Purpose**: Tiny utility (data copy or register setup)
 
@@ -638,7 +638,7 @@ Index  Offset  Purpose
 **Address**: 0x022230DC - 0x022230E4
 **Size**: 10 bytes
 **Type**: Leaf function
-**Called By**: func_002
+**Called By**: case_handlers_short
 
 **Purpose**: Tiny utility (even smaller than func_003)
 
@@ -648,31 +648,31 @@ Index  Offset  Purpose
 
 | Rank | Function | Address | Size | Type | Purpose | Status |
 |------|----------|---------|------|------|---------|--------|
-| 1 | **func_021** | 0x022234C8 | 38 B | Offload | **Vertex transform ✅ PARALLELIZED** | ✅ Translated |
-| 2 | **func_023** | 0x02223508 | **238 B** | Coord | **Frustum cull hub (LARGEST)** | ✅ Translated |
-| 3 | func_016 | 0x02223368 | 34 B | Leaf | Coord packing (17% frame budget) | ✅ Translated |
-| 4 | func_065 | 0x02223F2C | 150 B | Leaf | Rasterization ⭐⭐⭐ | ✅ Translated |
-| 5 | func_040 | 0x0222385E | 122 B | Leaf | Display list (12-entry jump table) | ✅ Translated |
-| 6 | func_033 | 0x022236FA | 98 B | Coord | Quad edge walking | ✅ Translated |
-| 7 | func_034 | 0x0222375C | 122 B | Leaf | Span filler (reciprocal table) | ✅ Translated |
-| 8 | func_020 | 0x02223468 | 86 B | Coord | Recursive polygon ⭐⭐ | ✅ Translated |
-| 9 | func_006 | 0x02223120 | 88 B | Leaf | MAC.L transform (~45 cyc/vtx) | ✅ Translated |
-| 10 | func_008 | 0x022231A2 | 66 B | Leaf | MAC.L transform | ✅ Translated |
-| 11 | func_001 | 0x02223024 | 74 B | Coord | Main coordinator | ✅ Translated |
-| 12 | func_005 | 0x022230E8 | 56 B | Coord | Transform loop | ✅ Translated |
-| 13 | func_024 | 0x022235F6 | 62 B | Leaf | Screen coords (3D→2D) | ✅ Translated |
-| 14 | func_018 | 0x022233A2 | 106 B | Coord | Polygon batch | ✅ Translated |
-| 15 | func_019 | 0x0222340C | 92 B | Coord | Polygon batch alt | ✅ Translated |
-| 16 | func_009 | 0x022231E4 | 30 B | Leaf | Result packing | ✅ Translated |
-| 17 | func_012 | 0x02223268 | 92 B | Coord | Matrix processor | Medium |
+| 1 | **vertex_transform** | 0x022234C8 | 38 B | Offload | **Vertex transform ✅ PARALLELIZED** | ✅ Translated |
+| 2 | **frustum_cull_short** | 0x02223508 | **238 B** | Coord | **Frustum cull hub (LARGEST)** | ✅ Translated |
+| 3 | coord_transform | 0x02223368 | 34 B | Leaf | Coord packing (17% frame budget) | ✅ Translated |
+| 4 | unrolled_data_copy | 0x02223F2C | 150 B | Leaf | Rasterization ⭐⭐⭐ | ✅ Translated |
+| 5 | display_list_short | 0x0222385E | 122 B | Leaf | Display list (12-entry jump table) | ✅ Translated |
+| 6 | render_quad_short | 0x022236FA | 98 B | Coord | Quad edge walking | ✅ Translated |
+| 7 | span_filler_short | 0x0222375C | 122 B | Leaf | Span filler (reciprocal table) | ✅ Translated |
+| 8 | vertex_helper_short | 0x02223468 | 86 B | Coord | Recursive polygon ⭐⭐ | ✅ Translated |
+| 9 | matrix_multiply | 0x02223120 | 88 B | Leaf | MAC.L transform (~45 cyc/vtx) | ✅ Translated |
+| 10 | alt_matrix_multiply | 0x022231A2 | 66 B | Leaf | MAC.L transform | ✅ Translated |
+| 11 | main_coordinator_short | 0x02223024 | 74 B | Coord | Main coordinator | ✅ Translated |
+| 12 | transform_loop | 0x022230E8 | 56 B | Coord | Transform loop | ✅ Translated |
+| 13 | screen_coords_short | 0x022235F6 | 62 B | Leaf | Screen coords (3D→2D) | ✅ Translated |
+| 14 | quad_batch_short | 0x022233A2 | 106 B | Coord | Polygon batch | ✅ Translated |
+| 15 | quad_batch_alt_short | 0x0222340C | 92 B | Coord | Polygon batch alt | ✅ Translated |
+| 16 | display_list_4elem | 0x022231E4 | 30 B | Leaf | Result packing | ✅ Translated |
+| 17 | display_entry | 0x02223268 | 92 B | Coord | Matrix processor | Medium |
 | 18 | func_014 | 0x02223330 | 18 B | Leaf | VDP 6-byte copy | ✅ Translated |
 | 19 | func_015 | 0x02223342 | 38 B | Leaf | VDP 402-byte copy | ✅ Translated |
-| 20 | func_000 | 0x0222300A | 26 B | Leaf | Matrix data copy | ✅ Translated |
-| 21 | func_011 | 0x0222321C | 76 B | Coord | Display list loop | ✅ Translated |
-| 22 | func_002 | 0x02223066 | 102 B | Coord | Case handlers | ✅ Translated |
-| 23 | func_010 | 0x02223202 | 26 B | Leaf | Result packing | Medium |
-| 24 | func_017 | 0x02223388 | 26 B | Coord | Quad helper | ✅ Translated |
-| 25 | func_007 | 0x02223176 | 44 B | Coord | Alt transform setup | ✅ Translated |
+| 20 | data_copy | 0x0222300A | 26 B | Leaf | Matrix data copy | ✅ Translated |
+| 21 | display_list_loop | 0x0222321C | 76 B | Coord | Display list loop | ✅ Translated |
+| 22 | case_handlers_short | 0x02223066 | 102 B | Coord | Case handlers | ✅ Translated |
+| 23 | display_list_3elem | 0x02223202 | 26 B | Leaf | Result packing | Medium |
+| 24 | quad_helper | 0x02223388 | 26 B | Coord | Quad helper | ✅ Translated |
+| 25 | alt_transform_loop | 0x02223176 | 44 B | Coord | Alt transform setup | ✅ Translated |
 
 ---
 
@@ -746,12 +746,12 @@ func_XXX:
 
 ### JSR @R14 Pattern
 
-**Used In**: func_005, func_007, and 7 other functions
+**Used In**: transform_loop, alt_transform_loop, and 7 other functions
 
 **Purpose**: Runtime dispatch to different handlers based on context
 
 **Typical Callback Addresses** (based on PC-relative loads):
-- Could be pointing to func_006, func_008, or other transform functions
+- Could be pointing to matrix_multiply, alt_matrix_multiply, or other transform functions
 - Allows switching between different transformation modes
 
 **Example**: Triangle vs Quad rendering might use different callbacks.
@@ -765,10 +765,10 @@ func_XXX:
 | Function Type | Cycles | Example |
 |---------------|--------|---------|
 | Tiny utility (<20 B) | 10-20 | func_003, func_004 |
-| Small helper (20-50 B) | 20-50 | func_016, func_009 |
-| Medium coordinator | 50-100 | func_001, func_002 |
-| MAC.L transform | 40-60 | func_006, func_008 |
-| Large processor | 100-200 | func_065, func_018 |
+| Small helper (20-50 B) | 20-50 | coord_transform, display_list_4elem |
+| Medium coordinator | 50-100 | main_coordinator_short, case_handlers_short |
+| MAC.L transform | 40-60 | matrix_multiply, alt_matrix_multiply |
+| Large processor | 100-200 | unrolled_data_copy, quad_batch_short |
 
 **Total Frame Budget**: ~383,000 cycles (23 MHz / 60 FPS)
 
@@ -780,7 +780,7 @@ func_XXX:
 - [SH2_3D_CALL_GRAPH.md](SH2_3D_CALL_GRAPH.md) - Function relationships
 - [SH2_3D_ENGINE_DATA_STRUCTURES.md](SH2_3D_ENGINE_DATA_STRUCTURES.md) - Data structures used by functions
 - [OPTIMIZATION_OPPORTUNITIES.md](OPTIMIZATION_OPPORTUNITIES.md) - How to optimize specific functions
-- [SLAVE_INJECTION_GUIDE.md](SLAVE_INJECTION_GUIDE.md) - func_021 offload infrastructure details (v4.0 baseline)
+- [SLAVE_INJECTION_GUIDE.md](SLAVE_INJECTION_GUIDE.md) - vertex_transform offload infrastructure details (v4.0 baseline)
 - Complete disassembly: `disasm/sh2_3d_engine.asm`
 - Call graph: `disasm/sh2_3d_engine_callgraph.txt`
 
@@ -792,10 +792,10 @@ All 92 function IDs are covered by source files in `disasm/sh2/3d_engine/` assem
 
 | Stage | Files |
 |-------|-------|
-| **Coordination** | `func_001_main_coordinator.asm`, `func_002_case_handlers.asm`, `master_command_loop.asm`, `slave_command_dispatcher.asm` |
-| **Transform** | `func_005_transform_loop.asm`, `func_006_matrix_multiply.asm`, `func_016_coord_transform.asm`, `func_021_original.asm` |
-| **Culling** | `func_023_frustum_cull.asm`, `func_024_screen_coords.asm`, `func_029_030_031_visibility_short.asm` |
-| **Rendering** | `func_033_render_quad.asm`, `func_034_span_filler.asm`, `func_036_render_dispatch.asm` |
-| **Display** | `func_040_display_list_short.asm`, `func_040_059_display_engine.asm`, `func_009_display_list_4elem.asm`, `func_054_conditional_bsr_short.asm`, `func_055_unrolled_copy_short.asm`, `func_070_loop_dispatcher_short.asm` |
-| **VDP/HW** | `func_014_015_vdp_copy_short.asm`, `func_067_plus_vdp_hw.asm`, `func_vdp_init_with_delay.asm` |
-| **Utilities** | `func_065_unrolled_data_copy.asm`, `func_066_rle_decoder.asm`, `func_000_data_copy.asm`, `func_067_rle_entry_alt1_short.asm`, `func_068_rle_entry_alt2_short.asm`, `func_069_block_copy_stride_short.asm` |
+| **Coordination** | `main_coordinator_short_main_coordinator.asm`, `case_handlers_short_case_handlers.asm`, `master_command_loop.asm`, `slave_command_dispatcher.asm` |
+| **Transform** | `transform_loop.asm`, `matrix_multiply.asm`, `coord_transform.asm`, `vertex_transform_original.asm` |
+| **Culling** | `frustum_cull_short_frustum_cull.asm`, `screen_coords_short_screen_coords.asm`, `visibility_short.asm` |
+| **Rendering** | `render_quad_short_render_quad.asm`, `span_filler_short_span_filler.asm`, `render_dispatch_short_render_dispatch.asm` |
+| **Display** | `display_list_short.asm`, `display_list_short_059_display_engine.asm`, `display_list_4elem.asm`, `conditional_bsr_short.asm`, `unrolled_copy_short.asm`, `loop_dispatcher_short.asm` |
+| **VDP/HW** | `vdp_copy_short.asm`, `rle_entry_alt1_short_plus_vdp_hw.asm`, `func_vdp_init_with_delay.asm` |
+| **Utilities** | `unrolled_data_copy.asm`, `rle_decoder.asm`, `data_copy.asm`, `rle_entry_alt1_short.asm`, `rle_entry_alt2_short.asm`, `block_copy_stride_short.asm` |

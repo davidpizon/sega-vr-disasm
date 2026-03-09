@@ -29,7 +29,7 @@ COMM registers ($A15120–$A1512E on 68K / $20004020–$2000402E on SH2):
   COMM0 HI ($A15120)  Master SH2 dispatch index / "command in flight" flag
   COMM0 LO ($A15121)  Jump table index byte (written with COMM0 HI together)
   COMM1 HI ($A15122)  Slave work command (original game protocol)
-  COMM1 LO ($A15123)  "Command done" signal managed by func_084
+  COMM1 LO ($A15123)  "Command done" signal managed by hw_init_short
   COMM2:3  ($A15124)  Source pointer / width parameter
   COMM4:5  ($A15128)  Destination pointer
   COMM6    ($A1512C)  Height + width-in-words packed

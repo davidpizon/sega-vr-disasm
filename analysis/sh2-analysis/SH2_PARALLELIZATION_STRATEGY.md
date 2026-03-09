@@ -7,11 +7,11 @@
 **What happened:**
 - The PicoDrive Slave boot issue (documented below) was **bypassed** using the full assembly rebuild approach
 - Slave idle loop at $0203CC was redirected to expansion ROM via disassembly modification
-- **TRUE PARALLEL PROCESSING** is now operational with func_021 offloaded to Slave SH2
+- **TRUE PARALLEL PROCESSING** is now operational with vertex_transform offloaded to Slave SH2
 
 **Current implementation (v4.0):**
-- func_021 trampoline at $0234C8 captures real parameters to 0x2203E000
-- Slave executes func_021_optimized at $300100 with func_016 inlined
+- vertex_transform trampoline at $0234C8 captures real parameters to 0x2203E000
+- Slave executes vertex_transform_optimized at $300100 with coord_transform inlined
 - Master returns immediately, freeing cycles for other work
 
 **See:** [SLAVE_INJECTION_GUIDE.md](SLAVE_INJECTION_GUIDE.md) for current implementation details.
@@ -67,7 +67,7 @@ Start with **minimal stub that immediately uses real polygon-based partitioning*
 ---
 
 ### Phase 2: Work Distribution (3-4 days) - Unchanged
-- Master initializes sync buffer in func_001
+- Master initializes sync buffer in main_coordinator_short
 - Master dispatches work in final_exit
 - Slave receives polygon range via SDRAM parameters
 
@@ -195,7 +195,7 @@ slave_process_polygons:
     ; STUB IMPLEMENTATION: Just increment counter for now
     ; Later: Replace with actual rendering call
     mov.l   #1,r2
-    ; bsr   slave_func_023_stub            ; Stub function (later: real rendering)
+    ; bsr   slave_frustum_cull_short_stub            ; Stub function (later: real rendering)
 
 .skip_polygon:
     shar2   r10                           ; R10 /= 4 (restore)
@@ -231,7 +231,7 @@ master_process_polygons:
     cmp/lt  #160,r0
     bf      .skip_polygon
 
-    ; bsr   func_023  ; Actual rendering (unchanged)
+    ; bsr   frustum_cull_short  ; Actual rendering (unchanged)
 ```
 
 **Result**: Both CPUs have identical bounds logic, partition correctly, can be independently verified.
@@ -248,17 +248,17 @@ Instead of duplicating all functions at once:
 - Pure computation on polygon data
 - Test: Verify computed region codes match Master's
 
-**4.2 Second: func_032 (Scanline Fill)**
+**4.2 Second: scanline_setup (Scanline Fill)**
 - Simple loop, writes to frame buffer
 - Now test actual rendering
 - Verify left/right split produces correct pixels
 
-**4.3 Third: func_033 (Polygon Rendering)**
-- Calls func_034 (Bresenham)
-- More complex but follows func_032 pattern
+**4.3 Third: render_quad_short (Polygon Rendering)**
+- Calls span_filler_short (Bresenham)
+- More complex but follows scanline_setup pattern
 - Test with real polygons
 
-**4.4 Fourth: func_023 (Frustum Culler)**
+**4.4 Fourth: frustum_cull_short (Frustum Culler)**
 - The main hub function
 - Calls 029, 032, 033, 036
 - Final integration
@@ -399,9 +399,9 @@ Total used: ~6.3 KB out of 256 KB SDRAM
 
 ### Phase 3.1-3.4 (Incremental Function Testing)
 - **3.1**: func_029 region codes match Master
-- **3.2**: func_032 pixels appear correctly in right-half regions
-- **3.3**: func_033 complex polygons render without artifacts
-- **3.4**: func_023 integration produces full scene
+- **3.2**: scanline_setup pixels appear correctly in right-half regions
+- **3.3**: render_quad_short complex polygons render without artifacts
+- **3.4**: frustum_cull_short integration produces full scene
 
 ### Phase 4 Testing (Post-Validation)
 - [x] Emulator: 1000-frame stress test
@@ -416,9 +416,9 @@ Total used: ~6.3 KB out of 256 KB SDRAM
 2. **Slave work loop with bounds checking** (foundation)
 3. **Master bounds checking** (mirror Slave logic)
 4. **func_029 stub** (first real function)
-5. **func_032 stub** (frame buffer writes)
-6. **func_033 stub** (complex rendering)
-7. **func_023 integration** (complete hub)
+5. **scanline_setup stub** (frame buffer writes)
+6. **render_quad_short stub** (complex rendering)
+7. **frustum_cull_short integration** (complete hub)
 8. **Optimization** (Phase 4, only after Phase 3 stable)
 
 ---
@@ -451,8 +451,8 @@ Simple approach (existing toolchain ready):
 ```makefile
 # SH2 Master code modifications
 disasm/sh2_3d_engine_annotated.asm:
-  - Add sync_buffer initialization in func_001
-  - Add bounds parsing call in func_001
+  - Add sync_buffer initialization in main_coordinator_short
+  - Add bounds parsing call in main_coordinator_short
   - Add bounds checking in rendering main loop
   - Add Slave dispatch in final_exit
 
@@ -484,8 +484,8 @@ No Makefile changes needed - existing build system can handle modified source fi
 - ✅ Bounds index populated
 - ✅ Polygon-based partition working (visible on screen)
 - ✅ func_029 computed correctly
-- ✅ func_032 writes to correct regions
-- ✅ func_033 & func_023 integrated
+- ✅ scanline_setup writes to correct regions
+- ✅ render_quad_short & frustum_cull_short integrated
 - ✅ No visual artifacts
 - ✅ +10-15% performance gain visible
 - ✅ Validated on real hardware

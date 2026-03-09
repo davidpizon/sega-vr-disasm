@@ -1,7 +1,7 @@
 # Slave SH2 Integration Guide
 
 > **📋 STATUS UPDATE (2026-01-25):** Infrastructure complete, ready for activation!
-> - ✅ `func_021_optimized` ready at $300100 (96 bytes, func_016 inlined)
+> - ✅ `vertex_transform_optimized` ready at $300100 (96 bytes, coord_transform inlined)
 > - ✅ `slave_work_wrapper` ready at $300200 (COMM7 polling loop)
 > - ✅ Parameter block design at 0x2203E000 (cache-through SDRAM)
 > - ⏳ **NOT YET ACTIVATED** - Requires trampoline connection + Slave PC redirect
@@ -9,9 +9,9 @@
 >
 > **Designed Architecture** (when activated):
 > ```
-> Game calls func_021 → Trampoline captures R14/R7/R8/R5 → COMM7=0x16
+> Game calls vertex_transform → Trampoline captures R14/R7/R8/R5 → COMM7=0x16
 >                     → Master returns immediately (no work done)
->                     → Slave picks up work, executes func_021_optimized
+>                     → Slave picks up work, executes vertex_transform_optimized
 >                     → Both CPUs running in parallel! (15-20% expected speedup)
 > ```
 
@@ -34,9 +34,9 @@ This guide documents the Slave SH2 integration using the 4MB expansion ROM.
 │  │ Game Logic  │    │ 1. Dispatch cmd │    │ 1. Poll COMM7           │ │
 │  │ Send cmds   │    │ 2. Call handler │    │ 2. Detect 0x16          │ │
 │  └─────────────┘    │ 3. Handler calls│    │ 3. Read params from     │ │
-│                     │    func_021     │    │    0x2203E000           │ │
+│                     │    vertex_transform     │    │    0x2203E000           │ │
 │                     │ 4. Trampoline:  │    │ 4. Execute              │ │
-│                     │    - Save params│───▶│    func_021_optimized   │ │
+│                     │    - Save params│───▶│    vertex_transform_optimized   │ │
 │                     │    - COMM7=0x16 │    │ 5. COMM5 += 101         │ │
 │                     │    - RTS (done!)│    │ 6. Clear COMM7          │ │
 │                     │ 5. Continue...  │    │ 7. Back to polling      │ │
@@ -52,10 +52,10 @@ This guide documents the Slave SH2 integration using the 4MB expansion ROM.
 | Component | Location | Size | Purpose |
 |-----------|----------|------|---------|
 | `master_dispatch_hook` | $300050 | 44B | Dispatch commands, skip COMM7 for 0x16 |
-| `func_021_optimized` | $300100 | 96B | Optimized vertex transform (func_016 inlined) |
+| `vertex_transform_optimized` | $300100 | 96B | Optimized vertex transform (coord_transform inlined) |
 | `slave_work_wrapper` | $300200 | 76B | Slave main loop, command dispatch |
-| `slave_test_func` | $300280 | 44B | Read params, call func_021_optimized |
-| `func_021 trampoline` | $0234C8 | 36B | Capture real params, signal Slave |
+| `slave_test_func` | $300280 | 44B | Read params, call vertex_transform_optimized |
+| `vertex_transform trampoline` | $0234C8 | 36B | Capture real params, signal Slave |
 
 ### Parameter Block (Shared Memory)
 
@@ -97,13 +97,13 @@ master_dispatch_hook:
 
 **Bytecode:** `4F22 E116 3010 8901 D205 2021 4008 D105 001E 400B 0009 4F26 D003 402B 0009 0009`
 
-### 2. func_021 Trampoline ($0234C8)
+### 2. vertex_transform Trampoline ($0234C8)
 
-Replaces original func_021. Captures **real** parameters from registers and signals Slave.
-Master returns immediately - **does not execute func_021 itself**.
+Replaces original vertex_transform. Captures **real** parameters from registers and signals Slave.
+Master returns immediately - **does not execute vertex_transform itself**.
 
 ```asm
-; func_021 SLAVE OFFLOAD TRAMPOLINE
+; vertex_transform SLAVE OFFLOAD TRAMPOLINE
     mov.l   @(16,PC),r0       ; Load param block (0x2203E000)
     mov.l   r14,@r0           ; Save R14 (context pointer)
     mov.l   r7,@(4,r0)        ; Save R7 (loop counter)
@@ -166,7 +166,7 @@ slave_work_wrapper:
 
 ### 4. Slave Test Function ($300280)
 
-Reads parameters from shared memory and calls func_021_optimized:
+Reads parameters from shared memory and calls vertex_transform_optimized:
 
 ```asm
 slave_test_func:
@@ -176,7 +176,7 @@ slave_test_func:
     mov.l   @(4,r0),r7        ; R7 = loop counter
     mov.l   @(8,r0),r8        ; R8 = data pointer
     mov.l   @(12,r0),r5       ; R5 = output pointer
-    mov.l   @(20,PC),r0       ; Load func_021_optimized addr
+    mov.l   @(20,PC),r0       ; Load vertex_transform_optimized addr
     jsr     @r0               ; Call it with real params!
     nop
     mov.l   @(20,PC),r0       ; Load COMM5 addr
@@ -203,7 +203,7 @@ slave_test_func:
 |-------------|---------|--------|
 | `0x0000` | Idle | Slave polls |
 | `0x0001` | Frame sync | Slave increments COMM4 |
-| `0x0016` | Vertex transform | Slave calls func_021_optimized |
+| `0x0016` | Vertex transform | Slave calls vertex_transform_optimized |
 
 ## Expansion ROM Layout
 
@@ -214,7 +214,7 @@ slave_test_func:
 | $30003E | 18B | Padding |
 | $300050 | 44B | `master_dispatch_hook` |
 | $30007C | 132B | Padding |
-| $300100 | 96B | `func_021_optimized` |
+| $300100 | 96B | `vertex_transform_optimized` |
 | $300160 | 160B | Padding |
 | $300200 | 76B | `slave_work_wrapper` |
 | $30024C | 52B | Padding |
@@ -231,7 +231,7 @@ make clean && make all
 xxd -s 0x300050 -l 44 build/vr_rebuild.32x
 # Expected: 4f22 e116 3010 8901 d205 2021 4008 d105 ...
 
-# Verify func_021 trampoline (36 bytes)
+# Verify vertex_transform trampoline (36 bytes)
 xxd -s 0x0234C8 -l 36 build/vr_rebuild.32x
 # Expected: d004 20e2 1071 1082 1053 d003 e116 2011 ...
 
@@ -246,7 +246,7 @@ picodrive build/vr_rebuild.32x
 ### Verify Operation
 
 Using emulator memory view:
-1. **COMM7** at `0x2000402E`: Toggles to 0x16 when func_021 called
+1. **COMM7** at `0x2000402E`: Toggles to 0x16 when vertex_transform called
 2. **COMM5** at `0x2000402A`: Increments by 101 per vertex transform
 3. **Param block** at `0x2203E000`: Contains real R14/R7/R8/R5 values
 
@@ -264,12 +264,12 @@ Using emulator memory view:
 ### Phase 3: Parameter Passing (2026-01-25)
 - Shared memory parameter block at 0x2203E000
 - Master writes dummy params, Slave reads them
-- func_021_optimized called with R7=0 (safe test)
+- vertex_transform_optimized called with R7=0 (safe test)
 
 ### Phase 4: Infrastructure Complete (2026-01-25) 📋 BASELINE
-- func_021 trampoline designed (not yet active)
+- vertex_transform trampoline designed (not yet active)
 - Parameter capture design complete (cache-through SDRAM at 0x2203E000)
-- func_021_optimized ready at $300100 with func_016 inlined (96 bytes)
+- vertex_transform_optimized ready at $300100 with coord_transform inlined (96 bytes)
 - slave_work_wrapper ready at $300200 (COMM7 polling loop)
 - **INFRASTRUCTURE READY** - Not yet connected, awaiting activation experiment
 
@@ -280,7 +280,7 @@ Using emulator memory view:
 1. ✅ **Infrastructure design** - All code ready in expansion ROM
 2. ✅ **Parameter block design** - Cache-through SDRAM at 0x2203E000
 3. ⏳ **Activation required**:
-   - Add trampoline at func_021 entry ($0234C8)
+   - Add trampoline at vertex_transform entry ($0234C8)
    - Redirect Slave PC to $02300200 (slave_work_wrapper)
    - Rebuild and test with metrics
 4. **Performance Testing**: Measure actual FPS improvement vs baseline
@@ -300,5 +300,5 @@ Using emulator memory view:
 ## Source Files
 
 - [expansion_300000.asm](../../disasm/sections/expansion_300000.asm) - Expansion ROM
-- [code_22200.asm](../../disasm/sections/code_22200.asm) - func_021 trampoline
+- [code_22200.asm](../../disasm/sections/code_22200.asm) - vertex_transform trampoline
 - [code_20200.asm](../../disasm/sections/code_20200.asm) - Slave entry point

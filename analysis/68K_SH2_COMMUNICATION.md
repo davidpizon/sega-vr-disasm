@@ -211,7 +211,7 @@ Keeps Master SH2 dispatch but writes all params to COMM2-6 at once (COMM1 untouc
  ├─ Wait COMM0_LO==0 (params read)  ├─ Read COMM2:3, COMM4:5, COMM6 at once
  ├─ Wait COMM0_HI==0 (done)         ├─ Signal params read: clr COMM0_LO
  │                                    ├─ Word-by-word 2D block copy
- │                                    ├─ func_084: clr.l COMM0 (done)
+ │                                    ├─ hw_init_short: clr.l COMM0 (done)
  │                                    └─ Return to dispatch loop
 ```
 
@@ -240,7 +240,7 @@ Same single-shot pattern as B-004, applied to `sh2_send_cmd_wait` (cmd $25 = RLE
  ├─ RTS                              ├─ Signal params read: clr COMM0_LO
  │                                    ├─ Reconstruct A0=$02xxxxxx, A1=$06xxxxxx
  │                                    ├─ JSR $06005058 (RLE decompressor)
- │                                    ├─ func_084: clr COMM0_HI (done)
+ │                                    ├─ hw_init_short: clr COMM0_HI (done)
  │                                    └─ Return to dispatch loop
 ```
 

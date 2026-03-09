@@ -63,7 +63,7 @@ When the 32X adapter is enabled, some addresses are remapped:
 │ $0003C0  │ $020003C0   │ MARS Security String                     │
 │ $0003F0  │ $020003F0   │ 68K Init Code Start                      │
 │ $000800  │ $02000800   │ 68K Main Program                         │
-│ $0234C8  │ $020234C8   │ func_021 trampoline (captures params)    │
+│ $0234C8  │ $020234C8   │ vertex_transform trampoline (captures params)    │
 │ $02046A  │ $0202046A   │ Master dispatch (redirected to $300050)  │
 │ ~$024000 │ ~$02024000  │ SH2 Code Section 1                       │
 │ ~$2F0000 │ ~$022F0000  │ SH2 Code Section 2                       │
@@ -72,7 +72,7 @@ When the 32X adapter is enabled, some addresses are remapped:
 │ $300000  │ $02300000   │ **EXPANSION ROM START**                  │
 │ $300028  │ $02300028   │ handler_frame_sync (22B)                 │
 │ $300050  │ $02300050   │ master_dispatch_hook (44B)               │
-│ $300100  │ $02300100   │ func_021_optimized (96B)                 │
+│ $300100  │ $02300100   │ vertex_transform_optimized (96B)                 │
 │ $300200  │ $02300200   │ slave_work_wrapper (76B)                 │
 │ $300280  │ $02300280   │ slave_test_func (44B)                    │
 │ $3FFFFF  │ $023FFFFF   │ End of Expansion ROM (1MB)               │
@@ -95,9 +95,9 @@ When the 32X adapter is enabled, some addresses are remapped:
 |---------|------|----------|---------|
 | $300028 | 22B | `handler_frame_sync` | Frame synchronization |
 | $300050 | 44B | `master_dispatch_hook` | Skips COMM7 write for cmd 0x16 |
-| $300100 | 96B | `func_021_optimized` | Vertex transform (func_016 inlined) |
+| $300100 | 96B | `vertex_transform_optimized` | Vertex transform (coord_transform inlined) |
 | $300200 | 76B | `slave_work_wrapper` | Command dispatch for Slave SH2 |
-| $300280 | 44B | `slave_test_func` | Reads params, calls func_021_optimized |
+| $300280 | 44B | `slave_test_func` | Reads params, calls vertex_transform_optimized |
 
 ### ROM Header Detail ($000100-$0001FF)
 ```
@@ -260,7 +260,7 @@ Standard Sega Genesis VDP registers, plus 32X enhancements.
 │ $02000000    │ 3MB      │ Original ROM (uncached)               │
 │ $02300000    │ 1MB      │ **EXPANSION ROM** (uncached)          │
 │ $02300050    │ 44B      │   → master_dispatch_hook              │
-│ $02300100    │ 96B      │   → func_021_optimized                │
+│ $02300100    │ 96B      │   → vertex_transform_optimized                │
 │ $02300200    │ 76B      │   → slave_work_wrapper                │
 │ $023FFFFF    │          │ End of Expansion ROM                  │
 │              │          │                                       │
@@ -332,7 +332,7 @@ Standard Sega Genesis VDP registers, plus 32X enhancements.
 | $2203E008 | 4B | Parameter: R8 |
 | $2203E00C | 4B | Parameter: R5 |
 
-**Parameter Block**: Used by func_021 trampoline to pass vertex transform parameters from Master to Slave SH2.
+**Parameter Block**: Used by vertex_transform trampoline to pass vertex transform parameters from Master to Slave SH2.
 
 ---
 
@@ -373,9 +373,9 @@ Vector#  Address   Purpose                    Handler
 | Address | Function | Description |
 |---------|----------|-------------|
 | $02046A | Master dispatch | Original command dispatch (now redirected) |
-| $0234C8 | func_021 trampoline | Captures params, signals Slave via COMM7 |
+| $0234C8 | vertex_transform trampoline | Captures params, signals Slave via COMM7 |
 | $02300050 | master_dispatch_hook | Expansion ROM: skips COMM7 for cmd 0x16 |
-| $02300100 | func_021_optimized | Expansion ROM: vertex transform |
+| $02300100 | vertex_transform_optimized | Expansion ROM: vertex transform |
 | $02300200 | slave_work_wrapper | Expansion ROM: Slave command dispatch |
 
 ---

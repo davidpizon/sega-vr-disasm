@@ -232,7 +232,7 @@ func_16B2 [state jump table dispatcher]
 
 **Sequence**:
 1. EntryPoint → MARSAdapterInit → SH2Handshake
-2. VDP init (func_05A6 → func_0654 → func_0694)
+2. VDP init (func_05A6 → unrolled_data_copy4 → block_copy_stride_short4)
 3. Data decompression (func_1140 → func_11E4 → func_12F4)
 4. Game initialization (func_CA9A)
 5. Ready for game state dispatcher

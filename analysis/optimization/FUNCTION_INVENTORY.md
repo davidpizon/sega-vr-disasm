@@ -765,7 +765,7 @@
 | 0x0DBD62 |  20B | bsr_target | simple  |  2 |  2 |   1× |
 | 0x0DBD74 |   4B | bsr_target | simple  |  0 |  0 |   1× |
 
-## func_065 (Our Problem Child)
+## unrolled_data_copy (Our Problem Child)
 
 **Address:** 0x023F2E
 **Size:** 150 bytes

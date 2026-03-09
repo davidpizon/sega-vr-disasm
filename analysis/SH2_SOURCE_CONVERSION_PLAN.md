@@ -78,13 +78,13 @@ JMP @R1                 ; Jumps to garbage
 
 | Function | Address | Size | Purpose | Priority |
 |----------|---------|------|---------|----------|
-| func_005 | 0x022230E6 | 46 B | Transform loop | HIGH |
-| func_006 | 0x02223114 | 98 B | Matrix multiply (hot path) | HIGH |
-| func_007 | 0x02223176 | 44 B | Alt transform loop | MEDIUM |
-| func_008 | 0x022231A2 | 66 B | Alt matrix multiply | MEDIUM |
-| func_001 | 0x0222301C | 74 B | Display list processor | LOW (complex) |
+| transform_loop | 0x022230E6 | 46 B | Transform loop | HIGH |
+| matrix_multiply | 0x02223114 | 98 B | Matrix multiply (hot path) | HIGH |
+| alt_transform_loop | 0x02223176 | 44 B | Alt transform loop | MEDIUM |
+| alt_matrix_multiply | 0x022231A2 | 66 B | Alt matrix multiply | MEDIUM |
+| main_coordinator_short | 0x0222301C | 74 B | Display list processor | LOW (complex) |
 
-**Start with func_006** - it's a leaf function (no calls), pure math, well understood.
+**Start with matrix_multiply** - it's a leaf function (no calls), pure math, well understood.
 
 ### Implementation Steps
 
@@ -94,7 +94,7 @@ Create [disasm/sh2/matrix_multiply.asm](../disasm/sh2/matrix_multiply.asm):
 
 ```assembly
 ; ============================================================================
-; Matrix × Vector Multiplication (func_006)
+; Matrix × Vector Multiplication (matrix_multiply)
 ; ============================================================================
 ; Address: 0x02223114 (ROM: 0x223114)
 ; Size: 98 bytes
@@ -122,7 +122,7 @@ Create [disasm/sh2/matrix_multiply.asm](../disasm/sh2/matrix_multiply.asm):
 ; Clobbers: R0, R1, R2, R3, R4, R5, R7, R8, MACH, MACL
 ; ============================================================================
 
-func_006:
+matrix_multiply:
     ; Transform X: X' = M[0][0]*X + M[0][1]*Y + M[0][2]*Z + T[0]
     mac.l   @r4+,@r5+           ; MAC += M[0][0] * V[0]
     mac.l   @r4+,@r5+           ; MAC += M[0][1] * V[1]
@@ -196,16 +196,16 @@ Modify [sections/code_222200.asm](../disasm/sections/code_222200.asm):
 ```assembly
 org $222200
 
-; Original binary blob up to func_006
+; Original binary blob up to matrix_multiply
 dc.w $A000, $01C0, $01B0, ...  ; (up to 0x223114)
 
 ; === FUNC_006: Matrix Multiply (MODIFIABLE SOURCE) ===
         org $223114
         incbin "../build/sh2_matrix.bin"  ; Assembled from matrix_multiply.asm
 
-; Resume original binary blob after func_006
+; Resume original binary blob after matrix_multiply
         org $223176
-dc.w $2FE6, $4F22, ...         ; func_007 and beyond
+dc.w $2FE6, $4F22, ...         ; alt_transform_loop and beyond
 ```
 
 #### 4. Verify Byte-Accurate Reassembly
@@ -214,14 +214,14 @@ dc.w $2FE6, $4F22, ...         ; func_007 and beyond
 # Build ROM with new source
 make clean && make
 
-# Compare func_006 bytes
+# Compare matrix_multiply bytes
 cmp -l "Virtua Racing Deluxe (USA).32x" build/vr_rebuild.32x | \
     awk '$1 >= 0x223114 && $1 < 0x223176 { print }'
 
 # Should show NO differences if source matches original
 ```
 
-#### 5. Optimize func_006
+#### 5. Optimize matrix_multiply
 
 Once we have working source, we can optimize:
 
@@ -247,7 +247,7 @@ Once we have working source, we can optimize:
 
 ### Long-term
 
-1. **True optimization** - Modify hot paths (func_006 is 47% of transform time)
+1. **True optimization** - Modify hot paths (matrix_multiply is 47% of transform time)
 2. **Slave parallelization** - Split transform work between Master/Slave
 3. **Interrupt-driven VDP** - Replace polling with H-INT (40% speedup)
 4. **Algorithm improvements** - Better culling, LOD, etc.
@@ -259,10 +259,10 @@ Once we have working source, we can optimize:
 | Phase | Task | Effort | Risk |
 |-------|------|--------|------|
 | 18.1 | Set up vasm SH2 assembler | 1 hour | LOW |
-| 18.2 | Convert func_006 to source | 2 hours | LOW (leaf function) |
+| 18.2 | Convert matrix_multiply to source | 2 hours | LOW (leaf function) |
 | 18.3 | Verify byte-accurate build | 1 hour | LOW |
-| 18.4 | Optimize func_006 (pointer resets) | 3 hours | MEDIUM |
-| 18.5 | Convert func_005 (loop) | 3 hours | MEDIUM (indirect calls) |
+| 18.4 | Optimize matrix_multiply (pointer resets) | 3 hours | MEDIUM |
+| 18.5 | Convert transform_loop (loop) | 3 hours | MEDIUM (indirect calls) |
 | 18.6 | Test with real game | 2 hours | MEDIUM |
 | **Total** | **~12 hours** | **MEDIUM** |
 
@@ -270,7 +270,7 @@ Once we have working source, we can optimize:
 
 ## Success Criteria
 
-- [ ] func_006 assembles from source
+- [ ] matrix_multiply assembles from source
 - [ ] Byte-accurate match with original ROM
 - [ ] ROM boots and renders correctly
 - [ ] Can modify source and reassemble
@@ -308,7 +308,7 @@ For major improvements, we could rewrite the entire 3D engine in C:
    cp vasmsh2_std ../../tools/
    ```
 
-2. **Create func_006 source** (as shown above)
+2. **Create matrix_multiply source** (as shown above)
 
 3. **Integrate into build** (Makefile + section includes)
 

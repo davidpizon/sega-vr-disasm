@@ -31,7 +31,7 @@ The v4.0 parallel processing architecture implements **true non-blocking workloa
 
 ```
 Game Engine
-    ↓ (calls func_021)
+    ↓ (calls vertex_transform)
 Master SH2
     ├─ Trampoline captures parameters → $2203E000
     ├─ Signals Slave via COMM7 = $16
@@ -44,7 +44,7 @@ Master SH2
                               Slave SH2
                               ├─ Detects COMM7 = $16
                               ├─ Reads params from $2203E000
-                              ├─ Executes func_021_optimized
+                              ├─ Executes vertex_transform_optimized
                               └─ Increments COMM5 counter (+101)
 ```
 
@@ -103,7 +103,7 @@ void master_dispatch_hook(uint16_t cmd) {
 
 ---
 
-### Component 2: func_021 Trampoline ($0234C8)
+### Component 2: vertex_transform Trampoline ($0234C8)
 
 **Location**: $0234C8 in SH2 code space
 **Size**: ~20 bytes (estimated)
@@ -112,7 +112,7 @@ void master_dispatch_hook(uint16_t cmd) {
 
 **Implementation**:
 ```asm
-; func_021 trampoline
+; vertex_transform trampoline
     MOV.L   R14,@($2203E000)    ; Capture R14 (rendering context pointer)
     MOV.L   R7,@($2203E004)     ; Capture R7 (loop count)
     MOV.L   R8,@($2203E008)     ; Capture R8 (data pointer)
@@ -171,7 +171,7 @@ void slave_work_wrapper() {
     MOV.L   @($2203E008),R8     ; Load R8
     MOV.L   @($2203E00C),R5     ; Load R5
 
-    BSR     func_021_optimized  ; Call the actual work function
+    BSR     vertex_transform_optimized  ; Call the actual work function
 
     ; Increment work counter
     MOV.W   @COMM5,R0
@@ -183,16 +183,16 @@ void slave_work_wrapper() {
 
 ---
 
-### Component 5: func_021_optimized ($300100)
+### Component 5: vertex_transform_optimized ($300100)
 
 **Location**: $300100 (expansion ROM)
 **Size**: 96 bytes
 
-**Purpose**: Optimized vertex transform with `func_016` inlined
+**Purpose**: Optimized vertex transform with `coord_transform` inlined
 
 **Characteristics**:
-- Original `func_021` called `func_016` as subroutine
-- Optimized version **inlines** func_016 for performance
+- Original `vertex_transform` called `coord_transform` as subroutine
+- Optimized version **inlines** coord_transform for performance
 - Eliminates BSR/RTS overhead (~10 cycles per call)
 - Works on parameters loaded from shared memory
 
@@ -204,12 +204,12 @@ void slave_work_wrapper() {
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ 1. Game Engine Calls func_021                                   │
+│ 1. Game Engine Calls vertex_transform                                   │
 │    - R14, R7, R8, R5 contain vertex transform parameters        │
 └────────────┬────────────────────────────────────────────────────┘
              ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 2. func_021 Trampoline ($0234C8)                                │
+│ 2. vertex_transform Trampoline ($0234C8)                                │
 │    - Captures R14 → [$2203E000]                                 │
 │    - Captures R7  → [$2203E004]                                 │
 │    - Captures R8  → [$2203E008]                                 │
@@ -232,13 +232,13 @@ void slave_work_wrapper() {
 │              │ │    - Loads R7  from [$2203E004]              │
 │              │ │    - Loads R8  from [$2203E008]              │
 │              │ │    - Loads R5  from [$2203E00C]              │
-│              │ │    - Calls func_021_optimized                │
+│              │ │    - Calls vertex_transform_optimized                │
 │              │ └───────────────┬──────────────────────────────┘
 │              │                 ↓
 │              │ ┌──────────────────────────────────────────────┐
-│ Both CPUs    │ │ 5. func_021_optimized ($300100)              │
+│ Both CPUs    │ │ 5. vertex_transform_optimized ($300100)              │
 │ Running in   │ │    - Executes vertex transform               │
-│ Parallel!    │ │    - func_016 logic inlined (optimized)      │
+│ Parallel!    │ │    - coord_transform logic inlined (optimized)      │
 │              │ │    - Processes vertex data                   │
 │              │ └───────────────┬──────────────────────────────┘
 │              │                 ↓
@@ -259,7 +259,7 @@ void slave_work_wrapper() {
 |---------|------|----------|
 | $300028 | 22B | `handler_frame_sync` |
 | $300050 | 44B | `master_dispatch_hook` (skips COMM7 for cmd $16) |
-| $300100 | 96B | `func_021_optimized` (func_016 inlined) |
+| $300100 | 96B | `vertex_transform_optimized` (coord_transform inlined) |
 | $300200 | 76B | `slave_work_wrapper` (command dispatch loop) |
 | $300280 | 44B | `slave_test_func` (param reader + dispatcher) |
 
@@ -365,7 +365,7 @@ After 10 transforms: COMM5 = 1010
 
 **Why 4 parameters?**:
 - SH2 calling convention typically uses R4-R7 for first 4 arguments
-- func_021 signature: `func_021(R14, R7, R8, R5)`
+- vertex_transform signature: `vertex_transform(R14, R7, R8, R5)`
 - Captures exact state needed for vertex transform
 
 **Why not more?**:
@@ -505,7 +505,7 @@ Time 4: COMM7 = 0 (idle, ready for next)
 
 - [68K_COMM_PROTOCOL.md](68K_COMM_PROTOCOL.md) - Pattern 4: Parallel Processing
 - [68K_MEMORY_MAP.md](68K_MEMORY_MAP.md) - Parameter block layout
-- [68K_HOTSPOT_FUNCTIONS.md](68K_HOTSPOT_FUNCTIONS.md) - func_021 trampoline
+- [68K_HOTSPOT_FUNCTIONS.md](68K_HOTSPOT_FUNCTIONS.md) - vertex_transform trampoline
 - [SH2_3D_PIPELINE_ARCHITECTURE.md](../SH2_3D_PIPELINE_ARCHITECTURE.md) - SH2 rendering
 
 ### External Documentation

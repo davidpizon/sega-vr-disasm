@@ -70,15 +70,15 @@ This is only beneficial if 4 writes happen consecutively (no intervening code).
 │    └─ Write to COMM registers ───> 3. Command Receive                    │
 │                               │    └─ Parse display list                 │
 │                               │                                          │
-│ [BLOCKING WAIT] <───────────────── 4. Vertex Transform (func_001-012)   │
+│ [BLOCKING WAIT] <───────────────── 4. Vertex Transform (main_coordinator_short-012)   │
 │                               │    ├─ Matrix setup                       │
 │                               │    ├─ MAC.L multiply sequences           │
 │                               │    └─ Fixed-point extraction (XTRCT)     │
 │                               │                                          │
-│                               │ 5. Polygon Processing (func_016-023)     │
+│                               │ 5. Polygon Processing (coord_transform-023)     │
 │                               │    ├─ Backface culling                   │
 │                               │    ├─ Clipping                           │
-│                               │    └─ Subdivision (func_020 recursive)   │
+│                               │    └─ Subdivision (vertex_helper_short recursive)   │
 │                               │                                          │
 │                               │ 6. Rasterization (func_060-065)          │
 │                               │    ├─ Span generation                    │
@@ -190,7 +190,7 @@ struct PolygonDescriptor {
 
 ## 4. Vertex Transformation Pipeline
 
-### 4.1 Matrix Multiplication (func_006, func_008)
+### 4.1 Matrix Multiplication (matrix_multiply, alt_matrix_multiply)
 
 **Location:** 0x02223114 (98 bytes), 0x022231A2 (66 bytes)
 
@@ -225,21 +225,21 @@ ADD     R8,R1         ; Add translation: X' = M·V + T
 
 ### 4.2 Coordinator Functions
 
-**func_001 (0x0222301C, 74 bytes) - Main Coordinator:**
+**main_coordinator_short (0x0222301C, 74 bytes) - Main Coordinator:**
 ```
-func_001
-├── func_005 (matrix setup)
-│   ├── func_006 (MAC.L matrix multiply)
+main_coordinator_short
+├── transform_loop (matrix setup)
+│   ├── matrix_multiply (MAC.L matrix multiply)
 │   └── JSR @R14 (indirect callback)
-├── func_007 (alt matrix setup)
-│   ├── func_008 (MAC.L matrix multiply variant)
+├── alt_transform_loop (alt matrix setup)
+│   ├── alt_matrix_multiply (MAC.L matrix multiply variant)
 │   └── JSR @R14 (indirect callback)
-├── func_009 (result processor)
-└── func_010 (result processor variant)
+├── display_list_4elem (result processor)
+└── display_list_3elem (result processor variant)
 ```
 
 **Estimated Calls Per Frame:**
-- ~500 vertices × transform = 500 func_006/008 calls
+- ~500 vertices × transform = 500 matrix_multiply/008 calls
 - At 35 cycles each = 17,500 cycles for vertex transforms
 - **4.6% of frame budget**
 
@@ -265,16 +265,16 @@ MOV.W   @R13+,R0         ; Delay slot: load parameter
 
 ## 5. Polygon Processing Pipeline
 
-### 5.1 Hotspot: func_016 (0x0222335A)
+### 5.1 Hotspot: coord_transform (0x0222335A)
 
 **Size:** 44 bytes (~22 instructions)
 **Called:** 4 times per polygon
 **Type:** Leaf function (no outgoing calls)
 
 **Call Sites:**
-- func_017 (1×)
-- func_018 (2×)
-- func_019 (1×)
+- quad_helper (1×)
+- quad_batch_short (2×)
+- quad_batch_alt_short (1×)
 
 **Overhead Analysis:**
 ```
@@ -290,11 +290,11 @@ Per call: BSR (2) + RTS (2) + delay slots (2) = 6 cycles
 - Trade 176 bytes for 5% speedup
 - Eliminate branch misprediction
 
-### 5.2 Recursive Subdivision: func_020 (0x02223468)
+### 5.2 Recursive Subdivision: vertex_helper_short (0x02223468)
 
 **Size:** 86 bytes
 **Called:** 3 times (including self-recursion)
-**Pattern:** `func_020 → func_020 → func_023`
+**Pattern:** `vertex_helper_short → vertex_helper_short → frustum_cull_short`
 
 **Likely Purpose:**
 - Polygon subdivision for large polygons
@@ -325,7 +325,7 @@ From code at 0x02224060:
 
 ## 6. Rasterization Pipeline
 
-### 6.1 Hotspot: func_065 (0x02223F2C) - UNTOUCHABLE
+### 6.1 Hotspot: unrolled_data_copy (0x02223F2C) - UNTOUCHABLE
 
 **Size:** 150 bytes (75 instructions)
 **Called:** 4 times per polygon batch
@@ -333,7 +333,7 @@ From code at 0x02224060:
 
 **What It Does:**
 ```asm
-func_065:
+unrolled_data_copy:
     ; Prologue
     SHLL8   R0              ; R0 *= 256
     SHLR    R0              ; R0 /= 2 → R0 *= 128
@@ -364,7 +364,7 @@ func_065:
 - Trampoline: Broke timing
 - NOP substitution: Broke R1 advancement
 
-**Verdict:** Abandon func_065 optimization. Focus on architectural improvements.
+**Verdict:** Abandon unrolled_data_copy optimization. Focus on architectural improvements.
 
 ### 6.2 Similar Rasterizer at 0x023ED0
 
@@ -473,7 +473,7 @@ When both CPUs access shared SDRAM:
 
 ### 8.4 Code Modification Risks
 
-**func_065 taught us:**
+**unrolled_data_copy taught us:**
 - Fall-through functions CANNOT be modified
 - Timing-sensitive code may break with any change
 - Always check for RTS before assuming function boundaries
@@ -489,7 +489,7 @@ When both CPUs access shared SDRAM:
    - Run for 60 seconds, calculate average
 
 2. **Profile actual function call frequencies**
-   - Instrument func_016, func_006, func_008
+   - Instrument coord_transform, matrix_multiply, alt_matrix_multiply
    - Confirm theoretical cycle counts
 
 ### Short Term (Medium Risk)
@@ -498,7 +498,7 @@ When both CPUs access shared SDRAM:
    - Replace counter increment with vertex transform
    - Start with 10% of vertices as proof-of-concept
 
-4. **Inline func_016 at call sites**
+4. **Inline coord_transform at call sites**
    - 4 call sites, 44 bytes each = 176 bytes
    - Expected gain: 5%
 
@@ -520,12 +520,12 @@ When both CPUs access shared SDRAM:
 - 3D pipeline is well-structured with clear stages
 - Vertex transform uses efficient MAC.L hardware
 - Polygon processing has parallelizable work
-- func_065 is untouchable (fall-through design)
+- unrolled_data_copy is untouchable (fall-through design)
 - Slave SH2 is 99.97% idle
 
 **What We Can Do:**
 - Offload vertex transforms to Slave (proven mechanism)
-- Inline hot utility functions (func_016)
+- Inline hot utility functions (coord_transform)
 - Split polygon processing by index range
 - Use frame buffer FIFO efficiently
 
@@ -547,7 +547,7 @@ When both CPUs access shared SDRAM:
 - [SH2_3D_CALL_GRAPH.md](sh2-analysis/SH2_3D_CALL_GRAPH.md) - Function relationships
 - [SH2_3D_ENGINE_DATA_STRUCTURES.md](sh2-analysis/SH2_3D_ENGINE_DATA_STRUCTURES.md) - Memory layouts
 - [OPTIMIZATION_OPPORTUNITIES.md](optimization/OPTIMIZATION_OPPORTUNITIES.md) - Optimization catalog
-- [func_065_FINAL_VERDICT.md](optimization/func_065_FINAL_VERDICT.md) - Why func_065 is untouchable
+- [unrolled_data_copy_FINAL_VERDICT.md](optimization/unrolled_data_copy_FINAL_VERDICT.md) - Why unrolled_data_copy is untouchable
 - [PHASE13_RESULTS.md](../PHASE13_RESULTS.md) - Slave sync validation
 
 ---

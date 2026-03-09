@@ -325,7 +325,7 @@ After boot completes, COMM0-7 transition to the game's command protocol. All mag
 
 Cross-referencing all game code, COMM1 (`$A15122`/`$20004022`) has **multiple overlapping roles** in VRD:
 
-### func_084 Behavior (Master SH2, `$060043F0`)
+### hw_init_short Behavior (Master SH2, `$060043F0`)
 
 Called after EVERY Master SH2 command as the "completion" signal:
 
@@ -426,7 +426,7 @@ The 8-word Communication Port is the primary inter-CPU channel. The 4-word FIFOs
 
 3. **Always use cache-through** (`$20004020`) for SH2 COMM access. Never `$00004020`.
 
-4. **COMM1 is a system signal register.** func_084 manages COMM1_LO bit 0 as the "command done" flag. The Slave polls COMM1 for work. Writing arbitrary data to COMM1 breaks both the Master and Slave protocols.
+4. **COMM1 is a system signal register.** hw_init_short manages COMM1_LO bit 0 as the "command done" flag. The Slave polls COMM1 for work. Writing arbitrary data to COMM1 breaks both the Master and Slave protocols.
 
 5. **COMM7 is the Slave doorbell.** Only write COMM7 from code that understands the Slave's signal protocol. Never broadcast game command bytes to COMM7 (proven crash — B-006).
 
@@ -434,4 +434,4 @@ The 8-word Communication Port is the primary inter-CPU channel. The 4-word FIFOs
 
 7. **No SH2→68K interrupts.** The SH2 can only signal the 68K by writing to COMM registers and hoping the 68K polls. CMD interrupts only go 68K→SH2.
 
-8. **func_084 clears COMM0:1 atomically** via a longword zero write to `$20004020`. This is both the command completion signal and the COMM1 reset. Any protocol using COMM1 for parameter passing must account for this.
+8. **hw_init_short clears COMM0:1 atomically** via a longword zero write to `$20004020`. This is both the command completion signal and the COMM1 reset. Any protocol using COMM1 for parameter passing must account for this.

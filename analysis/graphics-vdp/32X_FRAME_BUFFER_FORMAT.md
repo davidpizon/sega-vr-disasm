@@ -159,7 +159,7 @@ The 32X uses double buffering:
 |----------|---------|-------------|
 | func_27A0 | `$008827A0` | Direct frame buffer write (68K) |
 | func_2742 | `$00882742` | VDP auto-fill operation |
-| func_0694 | `$00880694` | Frame buffer clear (512 bytes) |
+| block_copy_stride_short4 | `$00880694` | Frame buffer clear (512 bytes) |
 | VDPFrameControl | `$008826C8` | FM bit coordination |
 
 ### Timing Constraints

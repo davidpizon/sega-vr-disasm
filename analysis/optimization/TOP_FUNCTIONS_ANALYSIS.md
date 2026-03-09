@@ -137,7 +137,7 @@ From function 0x0203D8, we can infer:
 ### Still Unknown
 
 - Which registers are truly caller-saved vs callee-saved?
-- What is R13 used for? (func_065 uses it as stride)
+- What is R13 used for? (unrolled_data_copy uses it as stride)
 - What is R14 used for? (frame pointer?)
 - Are there global register conventions?
 

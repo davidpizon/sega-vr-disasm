@@ -59,7 +59,7 @@ The project disassembler (`tools/m68k_disasm.py`) has these confirmed issues:
 `sh-elf-as` adds implicit alignment padding not present in the original ROM.
 - Even 1-byte mismatch causes section overlap errors in the fixed ROM layout
 - **Workaround:** Use `.short` raw hex opcodes instead of mnemonics (bypasses padding entirely)
-- func_001 and func_002 were blocked by this but now integrated using `_short.asm` format
+- main_coordinator_short and case_handlers_short were blocked by this but now integrated using `_short.asm` format
 
 ### When to Keep SH2 as dc.w
 - Functions with external BSR calls requiring symbol resolution
@@ -97,13 +97,13 @@ The opcode encoding stores a SCALED displacement (divided by the access size), b
 | COMM7 | $2000402E | 14 | `@(14,r8)` | — |
 
 ### All SH2 Functions Now Integrated
-All 92 SH2 function IDs (func_000–func_091) are accounted for via 89 `.inc` files:
+All 92 SH2 function IDs (data_copy–poll_copy_short) are accounted for via 89 `.inc` files:
 - **74 function groups** in individual/combined `.inc` files (46 use `.short` format, 28 use mnemonics)
 - **12 expansion ROM** `.inc` files (batch_copy_handler, cmd22_single_shot, etc.)
-- **2 numbering gaps**: func_035 (no address space between func_034/036), func_064 (none between func_055/065)
-- **4 subsumed IDs**: func_056-059 covered by func_055+065 range
-- **4 doc-only IDs**: func_060-063 in `func_060_063_raster_batch.asm` (DOCUMENTATION ONLY, addresses covered by func_051-054)
-- **2 merged IDs**: func_027/028 are shared exit paths within func_026.inc
+- **2 numbering gaps**: func_035 (no address space between span_filler_short/036), func_064 (none between unrolled_copy_short/065)
+- **4 subsumed IDs**: func_056-059 covered by unrolled_copy_short+065 range
+- **4 doc-only IDs**: func_060-063 in `raster_batch.asm` (DOCUMENTATION ONLY, addresses covered by offset_bsr_short-054)
+- **2 merged IDs**: func_027/028 are shared exit paths within bounds_compare_short.inc
 
 ### Translation Checklist
 1. Test immediately after each function translation
@@ -167,7 +167,7 @@ COMM1 (`$A15122`/`$20004022`) has multiple system-wide roles in VRD:
 
 | Consumer | What It Reads | How |
 |----------|--------------|-----|
-| **func_084** (Master SH2) | Clears COMM0:1 via longword zero, then sets COMM1_LO bit 0 | "command done" signal |
+| **hw_init_short** (Master SH2) | Clears COMM0:1 via longword zero, then sets COMM1_LO bit 0 | "command done" signal |
 | **V-INT handler** (68K) | `btst #0,COMM1_LO` | Checks SH2 completion |
 | **Scene init** (68K) | `btst #0,COMM1_LO` wait loop | Waits for SH2 ready |
 | **Frame swap** (68K) | `btst #0,COMM1_LO` | Checks SH2 state |
@@ -314,7 +314,7 @@ for addr in range(section_start, section_end, 2):
 
 When reverting SH2 code sections that contain literal pools (data words following code), the pool values must be restored from the original ROM bytes — **never reconstructed from memory or assumed to be NOPs**.
 
-**Root cause (2026-02-20):** A revert of B-004 replaced literal pool words at `$0251F0/$0251F2` with `$0009, $0009` (which look like NOP opcodes) instead of the correct `$0600, $43F0` (`func_084` pointer). The `JSR @R0` that loads this literal then jumped to `$00090009` (unmapped) → crash on every `sh2_send_cmd` call, earlier than the original bug.
+**Root cause (2026-02-20):** A revert of B-004 replaced literal pool words at `$0251F0/$0251F2` with `$0009, $0009` (which look like NOP opcodes) instead of the correct `$0600, $43F0` (`hw_init_short` pointer). The `JSR @R0` that loads this literal then jumped to `$00090009` (unmapped) → crash on every `sh2_send_cmd` call, earlier than the original bug.
 
 **Rule:** For every address being restored, grep the original ROM hex dump or the pre-patch git commit for the exact byte values. Do not trust manual reconstruction of literal pools.
 
@@ -389,12 +389,12 @@ Both produce the same result: handler returns to the dispatch loop. The differen
 
 **Design:**
 1. **68K sender** (`sh2_send_cmd` at $E35A, 50 bytes): Waits COMM0_HI==0, writes D1→COMM1, A0→COMM2:3, A1→COMM4:5, D0→COMM6, triggers COMM0_LO=$22 + COMM0_HI=$01, returns immediately.
-2. **SH2 handler** (`cmd22_single_shot` at expansion $3010F0, 60 bytes): Reads all params from COMM1-6 in one shot (R8=$20004020 as COMM base), performs word-by-word 2D block copy with $200 stride, calls func_084 for completion.
+2. **SH2 handler** (`cmd22_single_shot` at expansion $3010F0, 60 bytes): Reads all params from COMM1-6 in one shot (R8=$20004020 as COMM base), performs word-by-word 2D block copy with $200 stride, calls hw_init_short for completion.
 3. **Jump table redirect**: Entry at $020808 changed from $06005198 → $023010F0.
 
 **Key implementation details:**
 - **COMM7 reserved:** Layout uses COMM1-6 only. COMM7 is the Slave doorbell (sh2_cmd_27 async) and must NEVER be overwritten by cmd $22 data.
-- **func_084 completion:** Original handler calls func_084 ($060043F0) which clears COMM0+COMM1 (longword zero write to $20004020). This tells the 68K the command is done. Single-shot handler preserves this behavior — Option 2 (safest).
+- **hw_init_short completion:** Original handler calls hw_init_short ($060043F0) which clears COMM0+COMM1 (longword zero write to $20004020). This tells the 68K the command is done. Single-shot handler preserves this behavior — Option 2 (safest).
 - **Eliminates 2 blocking waits:** The original 3-phase protocol had 3 COMM6 handshake waits. Single-shot eliminates phases 2 and 3 entirely. 68K only waits once (COMM0_HI poll before writing).
 - **In-place replacement:** 90-byte function body → 50B new code + 40B NOP padding. No additional 68K section space needed.
 
@@ -416,7 +416,7 @@ Both produce the same result: handler returns to the dispatch loop. The differen
 ### B-006 Race-Mode Crash (All Patches Reverted)
 **Status:** FIXED — all 3 B-006 patches reverted to original game code (2026-02-11)
 **Symptom:** ROM boots, menus work, crashes with stuck engine sound when entering race mode.
-**Root cause:** Multiple interacting issues. Patch #2 (COMM7 broadcast) was the primary cause, but reverting Patch #2 alone was insufficient — Patches #1+#3 together also produced the same crash. Likely causes: shadow_path_wrapper's COMM7 barrier deadlocks the Master (blocks waiting for Slave to clear COMM7), and/or parallel func_021 execution on both CPUs creates data races on shared output buffers.
+**Root cause:** Multiple interacting issues. Patch #2 (COMM7 broadcast) was the primary cause, but reverting Patch #2 alone was insufficient — Patches #1+#3 together also produced the same crash. Likely causes: shadow_path_wrapper's COMM7 barrier deadlocks the Master (blocks waiting for Slave to clear COMM7), and/or parallel vertex_transform execution on both CPUs creates data races on shared output buffers.
 **Fix:** Full revert of all 3 patches. Original game code restored at $0203CC, $02046A, $0234C8.
 
 ### FPS Counter — BSR.W Displacement Bug (FIXED, diagnostic mode)
@@ -453,8 +453,8 @@ ROM $300000-$3FFFFF (~1MB, 99.9% free) is accessible to the 68K via banking or p
 | 68K V-INT hook via BSR.W | Exceeded ±32KB range (actual distance: 85KB) |
 | 68K in-section async queue | 0 bytes free in $E200 section, removed commit 0dd98c4 |
 | SH2 optimization alone for FPS | 66.6% Slave reduction → 0% FPS change (68K is bottleneck) |
-| func_065 FIFO batching | Fall-through control flow, can't restructure without breaking callers |
-| func_017-019 optimization in isolation | Tightly coupled: shared code paths, cross-function branching |
+| unrolled_data_copy FIFO batching | Fall-through control flow, can't restructure without breaking callers |
+| quad_helper-019 optimization in isolation | Tightly coupled: shared code paths, cross-function branching |
 | COMM7 broadcast of game commands via dispatch hook | Game cmd bytes (0x01, 0x27) collide with expansion signal values → Slave processes uninitialized queue → crash. See §COMM7 Signal Namespace Collision above. |
 | Placing Patch #2 literal at $020480 | Shared by D011@$020438 (init code). Silently redirects init JSR to hook address. Always scan for $Dnxx refs before overwriting. |
 | Fully async general commands ($22/$25/$2F/$21) | Buffer aliasing: 68K overwrites shared data buffers before Slave replays COMM protocol. Menu graphics corrupt, race timer runs at wrong speed. COMM replay mechanism confirmed working (race 3D scene rendered). Infrastructure kept dormant at $301000. Needs per-call-site data dependency analysis before selective async activation. |

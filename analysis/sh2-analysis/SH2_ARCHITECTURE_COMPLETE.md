@@ -11,7 +11,7 @@
 | Milestone | Status |
 |-----------|--------|
 | Expansion ROM (1MB @ $300000) | ✅ Complete |
-| func_021_optimized (with func_016 inlined) | ✅ Ready at $300100 |
+| vertex_transform_optimized (with coord_transform inlined) | ✅ Ready at $300100 |
 | slave_work_wrapper (COMM7 polling) | ✅ Ready at $300200 |
 | **Active parallel processing** | ⏳ **NOT YET CONNECTED** (baseline state) |
 
@@ -35,7 +35,7 @@ The Sega 32X features two Hitachi SH2 processors running at 23 MHz, responsible 
 | Named Functions | 107 |
 | Leaf Functions | 78 |
 | Coordinator Functions | 31 |
-| Hotspot Functions | 3 (func_016, func_065, func_020) |
+| Hotspot Functions | 3 (coord_transform, unrolled_data_copy, vertex_helper_short) |
 | 3D Engine Size | ~8 KB |
 | Frame Budget | 383,000 cycles (23 MHz @ 60 FPS) |
 
@@ -122,9 +122,9 @@ The Sega 32X features two Hitachi SH2 processors running at 23 MHz, responsible 
 
 **Infrastructure ready for activation**:
 - ✅ `slave_work_wrapper` at $02300200 - COMM7 polling loop
-- ✅ `func_021_optimized` at $02300100 - Vertex transform with func_016 inlined
+- ✅ `vertex_transform_optimized` at $02300100 - Vertex transform with coord_transform inlined
 - ✅ Parameter block at $2203E000 - Cache-through SDRAM for coherency
-- ⏳ **Not yet connected** - Requires Slave PC redirect + func_021 trampoline
+- ⏳ **Not yet connected** - Requires Slave PC redirect + vertex_transform trampoline
 
 **Historical note** (2026-01-20): PicoDrive's `sh2_reset()` reads boot vectors incorrectly, but custom builds with memory mapping fixes can run 4MB ROMs correctly.
 
@@ -141,16 +141,16 @@ The Sega 32X features two Hitachi SH2 processors running at 23 MHz, responsible 
 
 | Rank | Function | Address | Size | Purpose | Calls |
 |------|----------|---------|------|---------|-------|
-| 1 | **func_016** | 0x0222335A | 44 B | Coord transform | 4 |
-| 2 | **func_065** | 0x02223F2C | 150 B | Rasterization | 4 |
-| 3 | func_020 | 0x02223468 | 86 B | Recursive polygon | 3 |
-| 4 | func_006 | 0x02223114 | 98 B | MAC.L matrix mul | 1 |
-| 5 | func_008 | 0x022231A2 | 66 B | MAC.L variant | 2 |
-| 6 | func_001 | 0x0222301C | 74 B | Main coordinator | - |
-| 7 | func_005 | 0x022230E6 | 46 B | Transform setup | 1 |
-| 8 | func_018 | 0x022233A2 | 106 B | Polygon batch | - |
-| 9 | func_023 | 0x02223500 | ~80 B | Frustum cull | 2 |
-| 10 | func_009 | 0x022231E4 | 30 B | Result packing | 2 |
+| 1 | **coord_transform** | 0x0222335A | 44 B | Coord transform | 4 |
+| 2 | **unrolled_data_copy** | 0x02223F2C | 150 B | Rasterization | 4 |
+| 3 | vertex_helper_short | 0x02223468 | 86 B | Recursive polygon | 3 |
+| 4 | matrix_multiply | 0x02223114 | 98 B | MAC.L matrix mul | 1 |
+| 5 | alt_matrix_multiply | 0x022231A2 | 66 B | MAC.L variant | 2 |
+| 6 | main_coordinator_short | 0x0222301C | 74 B | Main coordinator | - |
+| 7 | transform_loop | 0x022230E6 | 46 B | Transform setup | 1 |
+| 8 | quad_batch_short | 0x022233A2 | 106 B | Polygon batch | - |
+| 9 | frustum_cull_short | 0x02223500 | ~80 B | Frustum cull | 2 |
+| 10 | display_list_4elem | 0x022231E4 | 30 B | Result packing | 2 |
 
 ### 3.2 Function Categories
 
@@ -168,27 +168,27 @@ Total: 109 Functions
 
 **Path 1: Vertex Transformation (HOT)**
 ```
-func_001 (Main Coordinator)
-  ├─> func_005 → func_006 (MAC.L) ⭐
+main_coordinator_short (Main Coordinator)
+  ├─> transform_loop → matrix_multiply (MAC.L) ⭐
   │             └─> JSR @R14 (callback)
-  └─> func_007 → func_008 (MAC.L) ⭐
+  └─> alt_transform_loop → alt_matrix_multiply (MAC.L) ⭐
                 └─> JSR @R14 (callback)
 ```
 Frequency: ~30,000 calls/sec (500 vertices × 60 FPS)
 
 **Path 2: Polygon Processing (HOT)**
 ```
-func_018 (Polygon Coordinator)
-  ├─> func_016 ⭐⭐⭐ (4× calls)
-  └─> func_020 → func_023
-              └─> func_020 (recursive)
+quad_batch_short (Polygon Coordinator)
+  ├─> coord_transform ⭐⭐⭐ (4× calls)
+  └─> vertex_helper_short → frustum_cull_short
+              └─> vertex_helper_short (recursive)
 ```
 Frequency: ~48,000 calls/sec (800 polygons × 60 FPS)
 
 **Path 3: Rasterization (HOT)**
 ```
 func_060 ─┐
-func_061 ─┼─> func_065 ⭐⭐⭐ (4× calls each)
+func_061 ─┼─> unrolled_data_copy ⭐⭐⭐ (4× calls each)
 func_062 ─┤
 func_063 ─┘
 ```
@@ -423,10 +423,10 @@ $A1512E COMM7     $2000402E       Slave → 68K     Response data
 
 | Function | Opportunity | Expected Gain | Status |
 |----------|-------------|---------------|--------|
-| func_016 | Inline at 4 call sites | 5% | ✅ **Code ready** (inlined in func_021_optimized) |
-| func_021 | Offload to Slave SH2 | 15-20% | 📋 **Infrastructure ready, not activated** |
-| func_065 | Loop unrolling, FIFO usage | 10% | 📋 Next target |
-| func_020 | Replace recursion with iteration | 3% | 📋 Planned |
+| coord_transform | Inline at 4 call sites | 5% | ✅ **Code ready** (inlined in vertex_transform_optimized) |
+| vertex_transform | Offload to Slave SH2 | 15-20% | 📋 **Infrastructure ready, not activated** |
+| unrolled_data_copy | Loop unrolling, FIFO usage | 10% | 📋 Next target |
+| vertex_helper_short | Replace recursion with iteration | 3% | 📋 Planned |
 
 ### 8.2 Structural Optimizations
 
@@ -495,7 +495,7 @@ slave_process_polygons:
 **Status**: Loop infrastructure exists, but:
 - Master never dispatches work (WORK_MAGIC never written)
 - slave_process_polygons is a counting stub, not a renderer
-- All rendering functions (slave_func_023, etc.) are stubs returning immediately
+- All rendering functions (slave_frustum_cull_short, etc.) are stubs returning immediately
 
 ---
 
@@ -536,17 +536,17 @@ The SH2 3D engine in Virtua Racing Deluxe is a well-structured rendering pipelin
 
 **v4.0 Infrastructure Status** (baseline tag: `v4.0-baseline`):
 - ✅ **Infrastructure complete**: Expansion ROM (1MB at $300000) with optimized Slave code
-- ✅ **func_021_optimized** at $300100: Vertex transform with func_016 inlined (96 bytes)
+- ✅ **vertex_transform_optimized** at $300100: Vertex transform with coord_transform inlined (96 bytes)
 - ✅ **slave_work_wrapper** at $300200: COMM7 polling loop ready for work dispatch
-- ⏳ **Not yet activated**: Current ROM uses original func_021, Slave remains idle
+- ⏳ **Not yet activated**: Current ROM uses original vertex_transform, Slave remains idle
 
 **Design ready for activation**:
-- Trampoline at func_021 entry ($0234C8) to capture parameters to $2203E000
+- Trampoline at vertex_transform entry ($0234C8) to capture parameters to $2203E000
 - Slave PC redirect to $02300200 for work polling
 - Expected 15-20% performance improvement from parallel processing
 
 **Next Steps**:
-1. **Activation experiment**: Connect infrastructure (Slave PC redirect + func_021 trampoline)
+1. **Activation experiment**: Connect infrastructure (Slave PC redirect + vertex_transform trampoline)
 2. **Performance testing**: Measure actual FPS improvement vs baseline
 3. **Synchronization**: Ensure Slave completes before results are needed
 4. **Load balancing**: Split polygon workload between CPUs

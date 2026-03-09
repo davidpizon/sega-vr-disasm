@@ -234,11 +234,11 @@ Currently, only `shadow_path_wrapper` meets these criteria (writes COMM7 = 0x16 
 |-------|----------|--------|--------|
 | #1 (Slave idle) | $0203CC | **KEEP** | Slave polls COMM7 between interrupts. Rendering via COMM1/interrupts unaffected. |
 | #2 (Master dispatch) | $02046A | **REVERT** | Restore original dispatch code. Hook adds no value without COMM7 signaling. |
-| #3 (func_021 trampoline) | $0234C8 | **KEEP** | Routes vertex transform through shadow_path_wrapper for parallel processing. |
+| #3 (vertex_transform trampoline) | $0234C8 | **KEEP** | Routes vertex transform through shadow_path_wrapper for parallel processing. |
 
 With Patch #2 reverted:
 - Original dispatch: `SHLL2 → table lookup → JSR handler → BRA loop`
-- Cmd 0x16 handler calls func_021 → Patch #3 → `shadow_path_wrapper` → writes COMM7 = 0x16
+- Cmd 0x16 handler calls vertex_transform → Patch #3 → `shadow_path_wrapper` → writes COMM7 = 0x16
 - Slave sees COMM7 = 0x16, does parallel vertex transform
 - No spurious COMM7 signals from other game commands
 - No queue drain with uninitialized data

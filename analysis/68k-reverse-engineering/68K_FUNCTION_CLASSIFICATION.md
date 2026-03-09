@@ -99,8 +99,8 @@ Functions are classified across multiple dimensions:
 | SH2Handshake | SH2 sync | Wait for handshake signatures |
 | func_05A6 | VDP init | Load 19 VDP register values |
 | func_05CE | Clear RAM | Clear Genesis VDP RAM (CRAM/VRAM/VSRAM) |
-| func_0654 | 32X VDP init | Setup 32X VDP mode + auto-fill |
-| func_0694 | Buffer clear | Initialize 32X frame buffer (512B) |
+| unrolled_data_copy4 | 32X VDP init | Setup 32X VDP mode + auto-fill |
+| block_copy_stride_short4 | Buffer clear | Initialize 32X frame buffer (512B) |
 | SecurityCode | Security | MARS security protocol check |
 | func_0FBE | Code copy | Relocate init code to Work RAM |
 | func_1140 | Decompress | RLE/bit-packed data decompressor |

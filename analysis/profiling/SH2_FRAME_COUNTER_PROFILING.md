@@ -39,12 +39,12 @@ Location: `/mnt/data/src/32x-playground/disasm/sh2_3d_engine_annotated.asm` (lin
 
 ## SH2 Display List Processing Pipeline
 
-### Display List Processor (func_001)
+### Display List Processor (main_coordinator_short)
 
 **Address**: CPU `0x0222301C` - `0x02223064` | ROM `0x01301C` - `0x013064`
 
 ```assembly
-func_001: Display List Command Loop
+main_coordinator_short: Display List Command Loop
   Command source: R13 (display list buffer pointer)
   Loop condition: Read command, check if opcode == 0x0C (terminator)
 
@@ -56,21 +56,21 @@ func_001: Display List Command Loop
 
 The **0x0C opcode** is the critical boundary marker for display list completion.
 
-### Frame Rendering (func_023-func_036)
+### Frame Rendering (frustum_cull_short-render_dispatch_short)
 
 **Address**: CPU `0x022237A0` - `0x022239A8` | ROM `0x0137A0` - `0x0139A8`
 
 ```assembly
-func_023 (hub function):
+frustum_cull_short (hub function):
   - Routes to rendering functions based on visibility tests
-  - Calls func_024-036 to rasterize geometry
+  - Calls screen_coords_short-036 to rasterize geometry
   - Fills frame buffers with pixel data
 
 func_029 (quad fill):
   - Scanline-based rasterization
   - Writes to frame buffer at 0x24000000 (SH2 side)
 
-func_036 (line renderer):
+render_dispatch_short (line renderer):
   - Similar scanline iteration
   - Also writes to frame buffer
 ```
@@ -234,10 +234,10 @@ If rate < 10 FPS: ✗ Hooking only specific cases
 
 ### Frame Completion
 - **SH2 final_exit**: ROM `0x023A9A`, CPU `0x0222399A`
-- **Display list terminator (0x0C)**: func_001 around ROM `0x01301C`
+- **Display list terminator (0x0C)**: main_coordinator_short around ROM `0x01301C`
 
 ### Display List Processing
-- **func_001**: ROM `0x01301C`, size 72 bytes
+- **main_coordinator_short**: ROM `0x01301C`, size 72 bytes
 - **Display list buffer**: SDRAM `0x22010000` (estimated)
 
 ### Communication with 68K
@@ -297,9 +297,9 @@ build/vr_sh2_frame_counter.32x             Modified ROM with counter
 ```
 [Display List (variable size)]
         ↓
-[func_001: Process commands until 0x0C]
+[main_coordinator_short: Process commands until 0x0C]
         ↓
-[func_023-036: Render geometry]
+[frustum_cull_short-036: Render geometry]
         ↓
 [final_exit: Cleanup, return] ← FRAME COMPLETE HERE
         ↓

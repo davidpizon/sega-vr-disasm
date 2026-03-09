@@ -258,7 +258,7 @@ JSR     (A0,D0.L)           ; Jump to handler
 **Structure**:
 
 ```asm
-; SH2 Pattern (func_021 trampoline at $0234C8) - NOT 68K CODE!
+; SH2 Pattern (vertex_transform trampoline at $0234C8) - NOT 68K CODE!
 ; 1. Capture parameters to shared memory
     MOV.L   R14,@($2203E000)    ; Store arg 1 (rendering context)
     MOV.L   R7,@($2203E004)     ; Store arg 2 (loop count)
@@ -593,7 +593,7 @@ JSR     (A0,D0.L)          ; Jump to handler
 | Register Wrapper | 2 | func_6D8C, func_A7CC | Save/call/restore |
 | Minimal Handler | 1 | func_1469C | Interrupt disable wrapper |
 | Entry Stub | 1 | func_4922 | Variant entry point |
-| **Parallel Trampoline** | **1** | **func_021 ($0234C8)** | **Parameter capture + signal** |
+| **Parallel Trampoline** | **1** | **vertex_transform ($0234C8)** | **Parameter capture + signal** |
 
 **Pattern**: Minimal code, delegation to other functions
 

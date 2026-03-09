@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-Analysis of the 3D engine reveals **8 major optimization opportunities** that could significantly improve rendering performance. The primary bottlenecks are in the rasterization hotspots (func_016, func_065), indirect function calls, and suboptimal loop structures.
+Analysis of the 3D engine reveals **8 major optimization opportunities** that could significantly improve rendering performance. The primary bottlenecks are in the rasterization hotspots (coord_transform, unrolled_data_copy), indirect function calls, and suboptimal loop structures.
 
 **Estimated Performance Gains**: 15-30% frame time reduction possible with targeted optimizations.
 
@@ -18,8 +18,8 @@ Analysis of the 3D engine reveals **8 major optimization opportunities** that co
 | ID | Opportunity | Impact | Effort | Priority |
 |----|-------------|--------|--------|----------|
 | **0** | **Replace polling with interrupt-driven** | **Very High** | **High** | **⭐⭐⭐⭐ HIGHEST** |
-| 1  | Inline hotspot func_016 | High | Low | ⭐⭐⭐ Critical |
-| 2  | Optimize func_065 pixel loop | High | Medium | ⭐⭐⭐ Critical |
+| 1  | Inline hotspot coord_transform | High | Low | ⭐⭐⭐ Critical |
+| 2  | Optimize unrolled_data_copy pixel loop | High | Medium | ⭐⭐⭐ Critical |
 | 3  | Remove indirect JSR @R14 calls | Medium | Medium | ⭐⭐ High |
 | 4  | Unroll MAC.L matrix loops | Medium | Low | ⭐⭐ High |
 | 5  | Master/Slave load balancing | High | High | ⭐⭐ High |
@@ -125,23 +125,23 @@ VRD was likely developed on EVA (development) units with fixed silicon (cut 2.5+
 
 ---
 
-## CRITICAL #1: Inline Hotspot Function func_016
+## CRITICAL #1: Inline Hotspot Function coord_transform
 
 ### Current Situation
 
 **Location**: 0x0222335A
 **Size**: 44 bytes (~22 instructions)
 **Called**: 4 times per polygon
-**Call Sites**: func_017, func_018 (2×), func_019
+**Call Sites**: quad_helper, quad_batch_short (2×), quad_batch_alt_short
 
 **Current Code Pattern**:
 ```assembly
-; Caller (func_018)
-func_018:
+; Caller (quad_batch_short)
+quad_batch_short:
     ...
-    BSR     func_016          ; 2 cycles (branch)
+    BSR     coord_transform          ; 2 cycles (branch)
     NOP                       ; 1 cycle (delay slot)
-    ; func_016 executes (~20-30 cycles)
+    ; coord_transform executes (~20-30 cycles)
     ; Returns here
     ...
 ```
@@ -159,15 +159,15 @@ func_018:
 
 ### Optimization Strategy
 
-**Inline func_016 at all 4 call sites**:
+**Inline coord_transform at all 4 call sites**:
 
 ```assembly
 ; Before
-    BSR     func_016          ; 2 cycles + function overhead
+    BSR     coord_transform          ; 2 cycles + function overhead
     NOP
 
-; After (inline 44 bytes of func_016)
-    ; [22 instructions from func_016 body]
+; After (inline 44 bytes of coord_transform)
+    ; [22 instructions from coord_transform body]
     ; No BSR, no RTS = save 6 cycles
 ```
 
@@ -184,7 +184,7 @@ func_018:
 
 ---
 
-## CRITICAL #2: Optimize func_065 Pixel Loop
+## CRITICAL #2: Optimize unrolled_data_copy Pixel Loop
 
 ### Current Situation
 
@@ -199,7 +199,7 @@ func_018:
 
 ```assembly
 ; Pseudo-code of likely current implementation
-func_065:
+unrolled_data_copy:
     for each pixel in span:
         read texture
         interpolate color
@@ -256,7 +256,7 @@ MOV.L   R3,@R8+
 
 ### Optimization Strategy 2: Loop Unrolling
 
-If func_065 has a loop, unroll it:
+If unrolled_data_copy has a loop, unroll it:
 
 **Before**:
 ```assembly
@@ -699,8 +699,8 @@ func:
 |--------------|----------------|------------|
 | Baseline (polling)    | 0%             | 24.0 FPS   |
 | **#0: Interrupt-driven** | **+100%** | **48.0 FPS** |
-| #1: Inline func_016 | +5% | 50.4 FPS |
-| #2: Optimize func_065 | +10% | 55.4 FPS |
+| #1: Inline coord_transform | +5% | 50.4 FPS |
+| #2: Optimize unrolled_data_copy | +10% | 55.4 FPS |
 | #3: Remove indirect calls | +2% | 56.5 FPS |
 | #4: Unroll MAC loops | +2% | 57.7 FPS |
 | #5: Master/Slave balance | +10% | 63.4 FPS |
@@ -762,14 +762,14 @@ func:
    - Must mask both Master/Slave interrupts during auto-request DMA
 
 ### Phase 1: Quick Wins (1-2 days)
-- ✅ Inline func_016 at 4 call sites
+- ✅ Inline coord_transform at 4 call sites
 - ✅ Unroll MAC.L loops where possible
 - ✅ Batch frame buffer writes
 
 **Expected**: +10-15% gain
 
 ### Phase 2: Medium Effort (1 week)
-- Optimize func_065 rasterization
+- Optimize unrolled_data_copy rasterization
 - Replace indirect calls with direct dispatch
 - Improve frame buffer FIFO usage
 

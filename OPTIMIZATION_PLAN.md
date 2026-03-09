@@ -30,7 +30,7 @@ Profiling (January 2026) conclusively proved that **the 68000 CPU is the perform
 | **3** | **Pipeline Overlap** | 68K builds frame N+1 while SH2 renders N | **+15-30% FPS** | Removes frame serialization |
 | **4** | **68K Work Offload** | Move physics/trig to idle Master SH2 | **+5-15% FPS** | Frees 68K compute cycles |
 | **5** | **VDP Polling** | Interrupt-driven VDP access (SH2 side) | **Variable** | Only helps if VDP waits are SH2-bound |
-| **6** | **SH2 Micro-Opts** | func_016 inlining, MAC loops, FIFO batch | **0% FPS** | SH2 is NOT the bottleneck |
+| **6** | **SH2 Micro-Opts** | coord_transform inlining, MAC loops, FIFO batch | **0% FPS** | SH2 is NOT the bottleneck |
 
 **Combined potential:** 24 FPS → 48-60+ FPS (via Tracks 1-4)
 
@@ -122,7 +122,7 @@ Each command follows a strict `submit → wait → continue` pattern:
 |-----------|---------|------|---------|--------|
 | `handler_frame_sync` | $300028 | 22B | Frame synchronization | Dormant |
 | `master_dispatch_hook` | $300050 | 44B | Skips COMM7 for cmd $16 | Reverted |
-| `func_021_optimized` | $300100 | 96B | Vertex transform (func_016 inlined) | Dormant |
+| `vertex_transform_optimized` | $300100 | 96B | Vertex transform (coord_transform inlined) | Dormant |
 | `slave_work_wrapper` | $300200 | 76B | COMM7 command dispatch | Dormant |
 | `slave_test_func` | $300280 | 44B | Test harness | Dormant |
 | `cmd25_single_shot` | $300500 | 64B | Single-shot decompression (cmd $25) | **ACTIVE (B-005)** |
@@ -159,7 +159,7 @@ Each command follows a strict `submit → wait → continue` pattern:
 
 **Implementation:**
 - **68K sender** (code_e200.asm): 90-byte function → 50B single-shot writes + 40B NOP padding
-- **SH2 handler** (cmd22_single_shot at $3010F0): 60 bytes, reads COMM2-6, 2D block copy with $200 stride, calls func_084
+- **SH2 handler** (cmd22_single_shot at $3010F0): 60 bytes, reads COMM2-6, 2D block copy with $200 stride, calls hw_init_short
 - **Jump table** (code_20200.asm): Entry $020808 redirected $06005198 → $023010F0 (active)
 - **COMM layout (v5, COMM1-safe)**: COMM0=$2222 (trigger=HI, index=LO), COMM2:3=A0, COMM4:5=A1, COMM6_HI=D1, COMM6_LO=D0/2, COMM1+COMM7=untouched
 - **Dispatch**: COMM0_HI ($20004020) = trigger flag (polled for non-zero); COMM0_LO ($20004021) = dispatch index (shll2 → jump table at $06000780)
@@ -286,7 +286,7 @@ All 17 command submissions per frame reuse COMM0/COMM4/COMM6. Naive async would 
 **Phase 3: Handshake reduction for sh2_send_cmd** (14 calls/frame) — IN PROGRESS (B-004)
 1. ✅ Per-call-site analysis: all 14 callers pass stable SDRAM/ROM/framebuffer pointers
 2. ✅ Single-shot COMM protocol: 68K writes D1→COMM1, A0→COMM2:3, A1→COMM4:5, D0→COMM6, triggers COMM0
-3. ✅ New SH2 handler: cmd22_single_shot at expansion $3010F0 (60B), reads COMM1-6, copies rows, calls func_084
+3. ✅ New SH2 handler: cmd22_single_shot at expansion $3010F0 (60B), reads COMM1-6, copies rows, calls hw_init_short
 4. ✅ Jump table redirect: $020808 → $023010F0
 5. ✅ ROM builds and binary verified
 6. **TODO:** Emulator test (PicoDrive) — menus, race mode, all game states
@@ -470,7 +470,7 @@ Profiling proved that SH2 cycle reduction does NOT improve FPS:
 
 | Optimization | Target | Cycle Savings | Status |
 |-------------|--------|--------------|--------|
-| func_016 inlining | func_021 call chain | ~10% of vertex transform | ✅ Done in expansion ROM |
+| coord_transform inlining | vertex_transform call chain | ~10% of vertex transform | ✅ Done in expansion ROM |
 | MAC loop unrolling | Matrix multiply | ~15% of multiply | Designed, not implemented |
 | Frame buffer FIFO batching | Rasterizer | 2.4x pixel write speed | Needs profiling |
 | SDRAM 16-byte alignment | Data structures | Burst read improvement | Needs profiling |
@@ -620,7 +620,7 @@ python3 analyze_pc_profile.py profile.csv
 
 **Tasks:**
 1. Patch dispatch at $02046A (Master dispatch hook)
-2. Patch trampoline at $0234C8 (func_021 redirect)
+2. Patch trampoline at $0234C8 (vertex_transform redirect)
 3. Verify Slave completes within frame budget
 4. Profile combined async + parallel configuration
 
@@ -704,7 +704,7 @@ Track 2 risks are moot — batch approach was abandoned. Single-shot protocol (B
 
 **Evidence:** 66.6% Slave SH2 reduction → 0% FPS change. The 68K is the constraint.
 
-**Implication:** func_016 inlining, delay loop elimination, MAC loop unrolling — all valuable for headroom but cannot improve FPS alone.
+**Implication:** coord_transform inlining, delay loop elimination, MAC loop unrolling — all valuable for headroom but cannot improve FPS alone.
 
 ### 2. 68K In-Section Async (Space Impossible)
 
@@ -712,11 +712,11 @@ Track 2 risks are moot — batch approach was abandoned. Single-shot protocol (B
 
 **Alternative:** SH2 interrupt queue (Path B) — uses expansion ROM with 1MB free.
 
-### 3. func_065 FIFO Batching (Fall-Through Design)
+### 3. unrolled_data_copy FIFO Batching (Fall-Through Design)
 
 **Evidence:** Function uses fall-through control flow (no RTS). Cannot be restructured without breaking all callers.
 
-### 4. func_017-019 Optimization (Tightly Coupled)
+### 4. quad_helper-019 Optimization (Tightly Coupled)
 
 **Evidence:** Shared code paths, cross-function branching, BSR range limits. Cannot be optimized in isolation.
 

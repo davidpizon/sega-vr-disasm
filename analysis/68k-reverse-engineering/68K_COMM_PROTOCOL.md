@@ -155,7 +155,7 @@ From [SendDREQCommand](68K_HOTSPOT_FUNCTIONS.md#senddreqcommand-0088fb36---17-ca
 | Command | COMM Register | Direction | Purpose | Source |
 |---------|---------------|-----------|---------|--------|
 | $2D | COMM0 | 68K → SH2 | DREQ transfer | SendDREQCommand ($FB36) |
-| $16 | COMM7 | **Master SH2 → Slave SH2** | **Vertex transform offload (v4.0)** | **func_021 trampoline ($0234C8)** |
+| $16 | COMM7 | **Master SH2 → Slave SH2** | **Vertex transform offload (v4.0)** | **vertex_transform trampoline ($0234C8)** |
 | 'VRES' | COMM6 | SH2 → 68K | Video resolution init | Boot sequence ($8A8) |
 | 'M_OK' | COMM0 | Master SH2 → 68K | Master SH2 ready | Boot sequence ($8CE) |
 | 'S_OK' | COMM2 | Slave SH2 → 68K | Slave SH2 ready | Boot sequence ($8D8) |
@@ -372,9 +372,9 @@ From 32X Hardware Manual:
 **Typical Usage** (when activated): Master SH2 offloads work to Slave SH2 without blocking
 
 ```
-Master SH2 (func_021)              Slave SH2 (slave_work_wrapper)
+Master SH2 (vertex_transform)              Slave SH2 (slave_work_wrapper)
 ────────────────────────────────────────────────────────────────────
-Game calls func_021
+Game calls vertex_transform
   ↓
 Trampoline at $0234C8
   ↓
@@ -393,8 +393,8 @@ Trampoline at $0234C8
 (both CPUs parallel           │   Read parameters from $2203E000
  when activated)              │
                               │   ↓
-                              │   Call func_021_optimized
-                              │   (func_016 inlined)
+                              │   Call vertex_transform_optimized
+                              │   (coord_transform inlined)
                               │   ↓
                               │   Increment COMM5 += 101 (debug telemetry)
                               │   ↓
@@ -413,8 +413,8 @@ Trampoline at $0234C8
 **Implementation**:
 - **Master Hook**: $02046A → `master_dispatch_hook` at $300050
 - **Slave Worker**: $300200 → `slave_work_wrapper` (command dispatch)
-- **Trampoline**: $0234C8 → `func_021` parameter capture
-- **Optimized Code**: $300100 → `func_021_optimized` (with func_016 inlined)
+- **Trampoline**: $0234C8 → `vertex_transform` parameter capture
+- **Optimized Code**: $300100 → `vertex_transform_optimized` (with coord_transform inlined)
 
 ---
 

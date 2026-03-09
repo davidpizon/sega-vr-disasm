@@ -146,7 +146,7 @@ Slave headroom:  76,663 cycles/frame (20% unused)
 
 **Original v4.0 Plan:**
 - Activate idle Slave SH2
-- Offload func_021 vertex transforms from Master to Slave
+- Offload vertex_transform vertex transforms from Master to Slave
 
 **Problem with Plan:**
 - ✅ Slave already active (78% utilization)

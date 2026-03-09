@@ -24,19 +24,19 @@ These functions are assembled via `make sh2-assembly` and included in the ROM:
 
 | Function | ROM Offset | Size | Include Location | Verified |
 |----------|------------|------|------------------|----------|
-| func_006 | 0x23120 | 88B | code_22200.asm:1948 | Yes (sh2-verify) |
-| func_008 | 0x231AC | 56B | code_22200.asm:1980 | Yes (sh2-verify) |
-| func_009 | 0x231E4 | 30B | code_22200.asm:1987 | Yes (sh2-verify) |
-| func_010 | 0x23202 | 26B | code_22200.asm:1993 | Yes (sh2-verify) |
-| func_016 | 0x23368 | 34B | code_22200.asm:2162 | Yes (sh2-verify) |
-| func_065 | 0x23F2C | 152B | code_22200.asm:3661 | Yes (sh2-verify) |
-| func_066 | 0x23FC4 | 48B | code_22200.asm:3669 | Yes (sh2-verify) |
+| matrix_multiply | 0x23120 | 88B | code_22200.asm:1948 | Yes (sh2-verify) |
+| alt_matrix_multiply | 0x231AC | 56B | code_22200.asm:1980 | Yes (sh2-verify) |
+| display_list_4elem | 0x231E4 | 30B | code_22200.asm:1987 | Yes (sh2-verify) |
+| display_list_3elem | 0x23202 | 26B | code_22200.asm:1993 | Yes (sh2-verify) |
+| coord_transform | 0x23368 | 34B | code_22200.asm:2162 | Yes (sh2-verify) |
+| unrolled_data_copy | 0x23F2C | 152B | code_22200.asm:3661 | Yes (sh2-verify) |
+| rle_decoder | 0x23FC4 | 48B | code_22200.asm:3669 | Yes (sh2-verify) |
 
 ### Expansion ROM Functions (new code, not replacing original)
 
 | Function | Expansion Addr | Size | Include Location | Notes |
 |----------|----------------|------|------------------|-------|
-| func_021_optimized | 0x300100 | 96B | expansion_300000.asm:138 | Slave vertex transform |
+| vertex_transform_optimized | 0x300100 | 96B | expansion_300000.asm:138 | Slave vertex transform |
 | batch_copy_handler | 0x300500 | 56B | expansion_300000.asm:400 | Batch copy cmd $26 |
 
 ---
@@ -53,19 +53,19 @@ These have clear boundaries, no shared exits, and can be verified independently.
 
 | Function | ROM Offset | Size | Notes |
 |----------|------------|------|-------|
-| func_000 | 0x2300A | 26B* | Data copy to VDP (verified) |
-| func_005 | 0x230E8 | 56B* | Transform loop (verified) |
-| func_007 | 0x23178 | 52B* | Alt transform (verified) |
-| func_011 | 0x23220 | 70B | Display list loop |
-| func_012 | 0x23278 | 74B | Display entry handler |
-| func_013 | 0x232D4 | 64B* | VDP init (verified, includes literals) |
-| func_017 | 0x2338A | 26B* | Quad helper (verified) |
-| func_021_original | 0x234C8 | 36B | ⚠️ DO NOT INTEGRATE (async experiments active) |
-| func_022 | 0x234EE | 26B* | Wait ready (verified) |
-| func_026 | 0x23644 | 52B | Bounds compare |
+| data_copy | 0x2300A | 26B* | Data copy to VDP (verified) |
+| transform_loop | 0x230E8 | 56B* | Transform loop (verified) |
+| alt_transform_loop | 0x23178 | 52B* | Alt transform (verified) |
+| display_list_loop | 0x23220 | 70B | Display list loop |
+| display_entry | 0x23278 | 74B | Display entry handler |
+| vdp_init_short | 0x232D4 | 64B* | VDP init (verified, includes literals) |
+| quad_helper | 0x2338A | 26B* | Quad helper (verified) |
+| vertex_transform_original | 0x234C8 | 36B | ⚠️ DO NOT INTEGRATE (async experiments active) |
+| wait_ready | 0x234EE | 26B* | Wait ready (verified) |
+| bounds_compare_short | 0x23644 | 52B | Bounds compare |
 | func_029 | 0x23688 | 64B | Visibility classify |
-| func_032 | 0x236DA | 30B* | Scanline setup (verified) |
-| func_033 | 0x236F8 | 98B | Render quad |
+| scanline_setup | 0x236DA | 30B* | Scanline setup (verified) |
+| render_quad_short | 0x236F8 | 98B | Render quad |
 
 **Total Category A:** 13 functions (12 integrable, 1 blocked by experiments)
 
@@ -75,10 +75,10 @@ These files contain multiple related functions that share code or exits.
 
 | File | Functions | ROM Range | Total Size | Complexity |
 |------|-----------|-----------|------------|------------|
-| func_003_004_offset_copy.asm | 2 | 0x230CC-0x230E7 | 28B* | Low |
-| func_025_027_028_030_031_small_utils.asm | 5 | 0x23634-0x236D8 | ~68B | Medium (shared exits) |
-| func_037_038_039_helpers.asm | 3 | 0x2381E-0x2385A | ~60B | Low |
-| func_060_063_raster_batch.asm | 4 | 0x23DD8-0x23EC6 | 238B | Low |
+| offset_copy_short_offset_copy.asm | 2 | 0x230CC-0x230E7 | 28B* | Low |
+| coord_offset_short_027_028_030_031_small_utils.asm | 5 | 0x23634-0x236D8 | ~68B | Medium (shared exits) |
+| helpers_short_helpers.asm | 3 | 0x2381E-0x2385A | ~60B | Low |
+| raster_batch.asm | 4 | 0x23DD8-0x23EC6 | 238B | Low |
 
 **Total Category B:** 4 files covering 14 functions
 
@@ -88,17 +88,17 @@ These are summary/documentation files covering many functions. They explain the 
 
 | File | Functions | ROM Range | Notes |
 |------|-----------|-----------|-------|
-| func_001_main_coordinator.asm | 1 | 0x23024-0x2306E | Includes jump table |
-| func_002_case_handlers.asm | ~8 | 0x23070-0x230CA | Case handlers for func_001 |
-| func_018_quad_batch.asm | 1 | 0x233A2-0x2340A | 106B, complex |
-| func_019_quad_batch_alt.asm | 1 | 0x2340C-0x23466 | 92B, complex |
-| func_020_recursive_quad.asm | 1 | 0x23468-0x234BE | 86B, recursive |
-| func_023_frustum_cull.asm | 1 | 0x23508-0x235F2 | 234B, largest standalone |
-| func_024_screen_coords.asm | 1 | 0x235F6-0x23632 | 60B |
-| func_034_span_filler.asm | 1 | 0x2375C-0x237D0 | ~116B |
-| func_036_render_dispatch.asm | 1 | 0x237D6-0x2381C | ~70B |
-| func_040_059_display_engine.asm | ~20 | 0x2385A-0x23DD6 | 1404B, summary file |
-| func_067_plus_vdp_hw.asm | ~10 | 0x23FF4-0x24200+ | 524B+, VDP region (starts after func_066) |
+| main_coordinator_short_main_coordinator.asm | 1 | 0x23024-0x2306E | Includes jump table |
+| case_handlers_short_case_handlers.asm | ~8 | 0x23070-0x230CA | Case handlers for main_coordinator_short |
+| quad_batch_short_quad_batch.asm | 1 | 0x233A2-0x2340A | 106B, complex |
+| quad_batch_alt_short_quad_batch_alt.asm | 1 | 0x2340C-0x23466 | 92B, complex |
+| vertex_helper_short_recursive_quad.asm | 1 | 0x23468-0x234BE | 86B, recursive |
+| frustum_cull_short_frustum_cull.asm | 1 | 0x23508-0x235F2 | 234B, largest standalone |
+| screen_coords_short_screen_coords.asm | 1 | 0x235F6-0x23632 | 60B |
+| span_filler_short_span_filler.asm | 1 | 0x2375C-0x237D0 | ~116B |
+| render_dispatch_short_render_dispatch.asm | 1 | 0x237D6-0x2381C | ~70B |
+| display_list_short_059_display_engine.asm | ~20 | 0x2385A-0x23DD6 | 1404B, summary file |
+| rle_entry_alt1_short_plus_vdp_hw.asm | ~10 | 0x23FF4-0x24200+ | 524B+, VDP region (starts after rle_decoder) |
 
 **Total Category C:** 11 files covering ~46 functions
 
@@ -136,14 +136,14 @@ These can likely be integrated with minimal risk:
 
 | Rank | Function | Header | Verified | ROM Range | Risk Level |
 |------|----------|--------|----------|-----------|------------|
-| 1 | func_000 | 24B | **26B*** | 0x2300A-0x23023 | Very Low |
-| 2 | func_022 | 18B | **26B*** | 0x234EE-0x23507 | Very Low |
-| 3 | func_017 | 22B | **26B*** | 0x2338A-0x233A3 | Very Low |
-| 4 | func_003_004 | 26B | **28B*** | 0x230CC-0x230E7 | Low |
-| 5 | func_032 | 28B | **30B*** | 0x236DA-0x236F7 | Low |
-| 6 | func_005 | 52B | **56B*** | 0x230E8-0x2311F | Low |
-| 7 | func_007 | 50B | **52B*** | 0x23178-0x231AB | Low |
-| 8 | func_013 | 50B | **64B*** | 0x232D4-0x23313 | Low |
+| 1 | data_copy | 24B | **26B*** | 0x2300A-0x23023 | Very Low |
+| 2 | wait_ready | 18B | **26B*** | 0x234EE-0x23507 | Very Low |
+| 3 | quad_helper | 22B | **26B*** | 0x2338A-0x233A3 | Very Low |
+| 4 | offset_copy_short | 26B | **28B*** | 0x230CC-0x230E7 | Low |
+| 5 | scanline_setup | 28B | **30B*** | 0x236DA-0x236F7 | Low |
+| 6 | transform_loop | 52B | **56B*** | 0x230E8-0x2311F | Low |
+| 7 | alt_transform_loop | 50B | **52B*** | 0x23178-0x231AB | Low |
+| 8 | vdp_init_short | 50B | **64B*** | 0x232D4-0x23313 | Low |
 
 **All Priority 1 sizes verified empirically (2026-01-31).** Discrepancies due to:
 - Delay slots (2B per RTS)
@@ -154,39 +154,39 @@ These can likely be integrated with minimal risk:
 
 | Rank | Function | Size | ROM Offset | Risk Level | Verify Size |
 |------|----------|------|------------|------------|-------------|
-| 9 | func_026 | 52B | 0x23644 | Low | Needed |
-| 10 | func_024 | 60B | 0x235F6 | Low | Needed |
+| 9 | bounds_compare_short | 52B | 0x23644 | Low | Needed |
+| 10 | screen_coords_short | 60B | 0x235F6 | Low | Needed |
 | 11 | func_029 | 64B | 0x23688 | Low | Needed |
-| 12 | func_011 | 70B | 0x23220 | Low | Needed |
-| 13 | func_012 | 74B | 0x23278 | Low | Needed |
-| 14 | func_033 | 98B | 0x236F8 | Medium | Needed |
+| 12 | display_list_loop | 70B | 0x23220 | Low | Needed |
+| 13 | display_entry | 74B | 0x23278 | Low | Needed |
+| 14 | render_quad_short | 98B | 0x236F8 | Medium | Needed |
 
 ### Priority 3: Complex Functions (Requires careful verification)
 
 | Rank | Function | Size | ROM Offset | Risk Level |
 |------|----------|------|------------|------------|
-| 15 | func_018 | 106B | 0x233A2 | Medium |
-| 16 | func_019 | 92B | 0x2340C | Medium |
-| 17 | func_020 | 86B | 0x23468 | Medium |
-| 18 | func_034 | 116B | 0x2375C | Medium |
-| 19 | func_036 | 70B | 0x237D6 | Medium |
-| 20 | func_023 | 234B | 0x23508 | High (largest) |
+| 15 | quad_batch_short | 106B | 0x233A2 | Medium |
+| 16 | quad_batch_alt_short | 92B | 0x2340C | Medium |
+| 17 | vertex_helper_short | 86B | 0x23468 | Medium |
+| 18 | span_filler_short | 116B | 0x2375C | Medium |
+| 19 | render_dispatch_short | 70B | 0x237D6 | Medium |
+| 20 | frustum_cull_short | 234B | 0x23508 | High (largest) |
 
 ### Priority 4: Multi-Function Groups
 
 | Rank | File | Size | ROM Range | Risk Level |
 |------|------|------|-----------|------------|
-| 21 | func_037_038_039_helpers | 60B | 0x2381E-0x2385A | Medium |
-| 22 | func_025_027_028_030_031 | 68B | 0x23634-0x236D8 | Medium (shared exits) |
-| 23 | func_060_063_raster_batch | 238B | 0x23DD8-0x23EC6 | Medium |
+| 21 | helpers_short_helpers | 60B | 0x2381E-0x2385A | Medium |
+| 22 | coord_offset_short_027_028_030_031 | 68B | 0x23634-0x236D8 | Medium (shared exits) |
+| 23 | raster_batch | 238B | 0x23DD8-0x23EC6 | Medium |
 
 ### Priority 5: Deferred (Documentation Only)
 
 These are summary files not intended for direct integration:
-- func_001_main_coordinator.asm
-- func_002_case_handlers.asm
-- func_040_059_display_engine.asm
-- func_067_plus_vdp_hw.asm
+- main_coordinator_short_main_coordinator.asm
+- case_handlers_short_case_handlers.asm
+- display_list_short_059_display_engine.asm
+- rle_entry_alt1_short_plus_vdp_hw.asm
 
 ---
 
@@ -266,7 +266,7 @@ make compare
 - Miscounting delay slots
 - Boundary confusion
 
-Example: func_000 header claims "18 bytes + 6 bytes data = 24 bytes" but actual is:
+Example: data_copy header claims "18 bytes + 6 bytes data = 24 bytes" but actual is:
 - 20 bytes code (10 instructions)
 - 2 bytes padding
 - 4 bytes literal
@@ -289,12 +289,12 @@ The `truncate -s SIZE` command is used to trim to exact size.
 
 ### 5.2 Shared Exit Points
 
-Functions like func_027, func_028, func_030, func_031 are actually shared exit points for func_026 and func_029. They must be integrated together.
+Functions like func_027, func_028, func_030, func_031 are actually shared exit points for bounds_compare_short and func_029. They must be integrated together.
 
 ### 5.3 Adjacent Functions
 
 Some functions share delay slots:
-- func_008's RTS delay slot is func_009's first instruction
+- alt_matrix_multiply's RTS delay slot is display_list_4elem's first instruction
 - This requires careful size calculation
 
 ### 5.4 Literal Pool Placement
@@ -327,32 +327,32 @@ For each integrated function:
 ## 7. Recommended Integration Order
 
 ### Phase 1: Quick Wins (Week 1)
-1. func_000 (26B*) - Simplest, verified
-2. func_022 (26B*) - Verified
-3. func_017 (26B*) - Verified
-4. func_032 (30B*) - Verified
+1. data_copy (26B*) - Simplest, verified
+2. wait_ready (26B*) - Verified
+3. quad_helper (26B*) - Verified
+4. scanline_setup (30B*) - Verified
 
 ### Phase 2: Small Standalone (Week 2)
-5. func_003_004 (28B*) - Grouped pair, verified
-6. func_005 (56B*) - Transform loop, verified
-7. func_007 (52B*) - Alt transform, verified
-8. func_013 (64B*) - VDP init, verified (includes literals)
+5. offset_copy_short (28B*) - Grouped pair, verified
+6. transform_loop (56B*) - Transform loop, verified
+7. alt_transform_loop (52B*) - Alt transform, verified
+8. vdp_init_short (64B*) - VDP init, verified (includes literals)
 
 ### Phase 3: Medium Functions (Week 3)
-9. func_026 (52B)
-10. func_024 (60B)
+9. bounds_compare_short (52B)
+10. screen_coords_short (60B)
 11. func_029 (64B)
-12. func_011 (70B)
+12. display_list_loop (70B)
 
 ### Phase 4: Larger Functions (Week 4+)
-13. func_012 (74B)
-14. func_033 (98B)
-15. func_018 (106B)
-16. func_019 (92B)
+13. display_entry (74B)
+14. render_quad_short (98B)
+15. quad_batch_short (106B)
+16. quad_batch_alt_short (92B)
 
 ### Phase 5: Complex Integration (Future)
-17. func_020 (86B) - Recursive
-18. func_023 (234B) - Largest
+17. vertex_helper_short (86B) - Recursive
+18. frustum_cull_short (234B) - Largest
 19. Multi-function groups
 
 ---
@@ -360,7 +360,7 @@ For each integrated function:
 ## 8. Next Steps
 
 1. **Cross-validate this analysis** - User reviews ROM offsets and sizes
-2. **Start with func_000** - Simplest integration to prove workflow
+2. **Start with data_copy** - Simplest integration to prove workflow
 3. **Establish verification baseline** - Confirm `make sh2-verify` catches mismatches
 4. **Iterate through Priority 1** - 8 functions, ~260 bytes total
 
@@ -373,41 +373,41 @@ For each integrated function:
 
 | File | ROM Start | ROM End | Size | Status |
 |------|-----------|---------|------|--------|
-| func_000_data_copy.asm | 0x2300A | 0x23023 | 26B* | Not integrated |
-| func_001_main_coordinator.asm | 0x23024 | 0x2306E | 74B | Doc only |
-| func_002_case_handlers.asm | 0x23070 | 0x230CA | 90B | Doc only |
-| func_003_004_offset_copy.asm | 0x230CC | 0x230E7 | 28B* | Not integrated |
-| func_005_transform_loop.asm | 0x230E8 | 0x2311F | 56B* | Not integrated |
-| func_006_matrix_multiply.asm | 0x23120 | 0x23177 | 88B | **INTEGRATED** |
-| func_007_alt_transform_loop.asm | 0x23178 | 0x231AB | 52B* | Not integrated |
-| func_008_alt_matrix_multiply.asm | 0x231AC | 0x231E3 | 56B | **INTEGRATED** |
-| func_009_display_list_4elem.asm | 0x231E4 | 0x23201 | 30B | **INTEGRATED** |
-| func_010_display_list_3elem.asm | 0x23202 | 0x2321B | 26B | **INTEGRATED** |
-| func_011_display_list_loop.asm | 0x23220 | 0x23266 | 70B | Not integrated |
-| func_012_display_entry_handler.asm | 0x23278 | 0x232C2 | 74B | Not integrated |
-| func_013_vdp_init.asm | 0x232D4 | 0x23313 | 64B* | Not integrated |
-| func_016_coord_transform.asm | 0x23368 | 0x2338A | 34B | **INTEGRATED** |
-| func_017_quad_helper.asm | 0x2338A | 0x233A3 | 26B* | Not integrated |
-| func_018_quad_batch.asm | 0x233A2 | 0x2340A | 106B | Not integrated |
-| func_019_quad_batch_alt.asm | 0x2340C | 0x23466 | 92B | Not integrated |
-| func_020_recursive_quad.asm | 0x23468 | 0x234BE | 86B | Not integrated |
-| func_021_original.asm | 0x234C8 | 0x234EC | 36B | Not integrated |
-| func_022_wait_ready.asm | 0x234EE | 0x23507 | 26B* | Not integrated |
-| func_023_frustum_cull.asm | 0x23508 | 0x235F2 | 234B | Not integrated |
-| func_024_screen_coords.asm | 0x235F6 | 0x23632 | 60B | Not integrated |
-| func_025_027_028_030_031_small_utils.asm | 0x23634 | 0x236D8 | ~68B | Not integrated |
-| func_026_bounds_compare.asm | 0x23644 | 0x23678 | 52B | Not integrated |
+| data_copy.asm | 0x2300A | 0x23023 | 26B* | Not integrated |
+| main_coordinator_short_main_coordinator.asm | 0x23024 | 0x2306E | 74B | Doc only |
+| case_handlers_short_case_handlers.asm | 0x23070 | 0x230CA | 90B | Doc only |
+| offset_copy_short_offset_copy.asm | 0x230CC | 0x230E7 | 28B* | Not integrated |
+| transform_loop.asm | 0x230E8 | 0x2311F | 56B* | Not integrated |
+| matrix_multiply.asm | 0x23120 | 0x23177 | 88B | **INTEGRATED** |
+| alt_transform_loop.asm | 0x23178 | 0x231AB | 52B* | Not integrated |
+| alt_matrix_multiply.asm | 0x231AC | 0x231E3 | 56B | **INTEGRATED** |
+| display_list_4elem.asm | 0x231E4 | 0x23201 | 30B | **INTEGRATED** |
+| display_list_3elem.asm | 0x23202 | 0x2321B | 26B | **INTEGRATED** |
+| display_list_loop.asm | 0x23220 | 0x23266 | 70B | Not integrated |
+| display_entry_handler.asm | 0x23278 | 0x232C2 | 74B | Not integrated |
+| vdp_init_short_vdp_init.asm | 0x232D4 | 0x23313 | 64B* | Not integrated |
+| coord_transform.asm | 0x23368 | 0x2338A | 34B | **INTEGRATED** |
+| quad_helper.asm | 0x2338A | 0x233A3 | 26B* | Not integrated |
+| quad_batch_short_quad_batch.asm | 0x233A2 | 0x2340A | 106B | Not integrated |
+| quad_batch_alt_short_quad_batch_alt.asm | 0x2340C | 0x23466 | 92B | Not integrated |
+| vertex_helper_short_recursive_quad.asm | 0x23468 | 0x234BE | 86B | Not integrated |
+| vertex_transform_original.asm | 0x234C8 | 0x234EC | 36B | Not integrated |
+| wait_ready.asm | 0x234EE | 0x23507 | 26B* | Not integrated |
+| frustum_cull_short_frustum_cull.asm | 0x23508 | 0x235F2 | 234B | Not integrated |
+| screen_coords_short_screen_coords.asm | 0x235F6 | 0x23632 | 60B | Not integrated |
+| coord_offset_short_027_028_030_031_small_utils.asm | 0x23634 | 0x236D8 | ~68B | Not integrated |
+| bounds_compare_short_bounds_compare.asm | 0x23644 | 0x23678 | 52B | Not integrated |
 | func_029_visibility_classify.asm | 0x23688 | 0x236C8 | 64B | Not integrated |
-| func_032_scanline_setup.asm | 0x236DA | 0x236F7 | 30B* | Not integrated |
-| func_033_render_quad.asm | 0x236F8 | 0x2375A | 98B | Not integrated |
-| func_034_span_filler.asm | 0x2375C | 0x237D0 | ~116B | Not integrated |
-| func_036_render_dispatch.asm | 0x237D6 | 0x2381C | ~70B | Not integrated |
-| func_037_038_039_helpers.asm | 0x2381E | 0x2385A | ~60B | Not integrated |
-| func_040_059_display_engine.asm | 0x2385A | 0x23DD6 | 1404B | Doc only |
-| func_060_063_raster_batch.asm | 0x23DD8 | 0x23EC6 | 238B | Not integrated |
-| func_065_unrolled_data_copy.asm | 0x23F2C | 0x23FC3 | 152B | **INTEGRATED** |
-| func_066_rle_decoder.asm | 0x23FC4 | 0x23FF3 | 48B | **INTEGRATED** |
-| func_067_plus_vdp_hw.asm | 0x23FF4 | 0x24200+ | 524B+ | Doc only (starts after func_066) |
+| scanline_setup.asm | 0x236DA | 0x236F7 | 30B* | Not integrated |
+| render_quad_short_render_quad.asm | 0x236F8 | 0x2375A | 98B | Not integrated |
+| span_filler_short_span_filler.asm | 0x2375C | 0x237D0 | ~116B | Not integrated |
+| render_dispatch_short_render_dispatch.asm | 0x237D6 | 0x2381C | ~70B | Not integrated |
+| helpers_short_helpers.asm | 0x2381E | 0x2385A | ~60B | Not integrated |
+| display_list_short_059_display_engine.asm | 0x2385A | 0x23DD6 | 1404B | Doc only |
+| raster_batch.asm | 0x23DD8 | 0x23EC6 | 238B | Not integrated |
+| unrolled_data_copy.asm | 0x23F2C | 0x23FC3 | 152B | **INTEGRATED** |
+| rle_decoder.asm | 0x23FC4 | 0x23FF3 | 48B | **INTEGRATED** |
+| rle_entry_alt1_short_plus_vdp_hw.asm | 0x23FF4 | 0x24200+ | 524B+ | Doc only (starts after rle_decoder) |
 
 ---
 

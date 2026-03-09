@@ -1,4 +1,4 @@
-# Debugging func_065 FIFO ROM with GDB
+# Debugging unrolled_data_copy FIFO ROM with GDB
 
 ## Problem
 Patched ROM "Virtua Racing - FIFO.32x" not booting.
@@ -31,14 +31,14 @@ gdb
 
 ### 3. Set Breakpoint at Trampoline
 ```gdb
-# Break when func_065 is first called
+# Break when unrolled_data_copy is first called
 (gdb) break *0x02223F2E
 (gdb) continue
 ```
 
 **Expected**: Breakpoint should hit when rendering starts
 
-**If breakpoint never hits**: Original game code isn't reaching func_065
+**If breakpoint never hits**: Original game code isn't reaching unrolled_data_copy
 - Check if game initializes properly
 - May be crashing earlier
 
@@ -150,7 +150,7 @@ gdb
 ## Common Failure Modes
 
 ### Failure 1: Breakpoint Never Hits
-**Symptom**: Game crashes before func_065 is called
+**Symptom**: Game crashes before unrolled_data_copy is called
 **Cause**: Earlier initialization code broken by our patch
 **Fix**: Verify no other code overlaps with 0x16300 or trampoline
 

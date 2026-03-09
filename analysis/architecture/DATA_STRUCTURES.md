@@ -349,32 +349,32 @@ See [MASTER_SLAVE_ANALYSIS.md](MASTER_SLAVE_ANALYSIS.md) for complete v2.3 proto
 
 ### Rendering Context (📋 Inferred, ~56 bytes)
 
-Multiple registers point to context structures during rendering. Based on func_006/func_009/func_010 analysis:
+Multiple registers point to context structures during rendering. Based on matrix_multiply/display_list_4elem/display_list_3elem analysis:
 
 **R14-based context (word operations):**
 ```
 Offset  Size  Field               Evidence
 ------  ----  -----               --------
-$02     2     [word field]        MOV.W @(2,R14),R0 in func_009/010
+$02     2     [word field]        MOV.W @(2,R14),R0 in display_list_4elem/010
 $06     2     [counter/index]     MOV.W @(6,R14),R0 / MOV.W R0,@(6,R14)
 ```
 
-**R6-based context (func_006):**
+**R6-based context (matrix_multiply):**
 ```
 Offset  Size  Field               Evidence
 ------  ----  -----               --------
-$1C     4     scale_factor        MOV.L @(28,R6),R3 in func_006
+$1C     4     scale_factor        MOV.L @(28,R6),R3 in matrix_multiply
 ```
 
 **R10-based output (screen coordinates):**
 ```
 Offset  Size  Field               Evidence
 ------  ----  -----               --------
-$0C     2     screen_y            MOV.W R0,@(12,R10) in func_006
-$0E     2     screen_x            MOV.W R0,@(14,R10) in func_006
+$0C     2     screen_y            MOV.W R0,@(12,R10) in matrix_multiply
+$0E     2     screen_x            MOV.W R0,@(14,R10) in matrix_multiply
 ```
 
-**R11-based output buffer (func_009/010):**
+**R11-based output buffer (display_list_4elem/010):**
 ```
 Offset  Size  Field               Evidence
 ------  ----  -----               --------
@@ -382,10 +382,10 @@ $02     2     [header word]       MOV.W R0,@(2,R11)
 $04     4     element[0]          MOV.L R0,@(4,R11)
 $08     4     element[1]          MOV.L R1,@(8,R11)
 $0C     4     element[2]          MOV.L R2,@(12,R11)
-$10     4     element[3]          MOV.L R3,@(16,R11) (func_009 only)
+$10     4     element[3]          MOV.L R3,@(16,R11) (display_list_4elem only)
 ```
 
-**Note:** The original generic "SH2 Rendering Context" structure documented below may not match actual code. The above is derived from func_006/009/010 disassembly.
+**Note:** The original generic "SH2 Rendering Context" structure documented below may not match actual code. The above is derived from matrix_multiply/009/010 disassembly.
 
 ### Generic Rendering Context (❓ Hypothetical, 56 bytes)
 

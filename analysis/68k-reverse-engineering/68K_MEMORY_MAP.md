@@ -279,7 +279,7 @@ Based on analysis of Virtua Racing Deluxe:
 | **$2203E008** | 4 bytes | R8 parameter (data pointer) |
 | **$2203E00C** | 4 bytes | R5 parameter (output pointer) |
 
-**Purpose**: Shared memory for Master SH2 → Slave SH2 parameter passing in parallel processing architecture. Parameters captured by `func_021` trampoline at $0234C8 and consumed by Slave SH2's `slave_test_func` at $300280.
+**Purpose**: Shared memory for Master SH2 → Slave SH2 parameter passing in parallel processing architecture. Parameters captured by `vertex_transform` trampoline at $0234C8 and consumed by Slave SH2's `slave_test_func` at $300280.
 
 **⚠️ Status**: Infrastructure ready, activation deferred due to timing concerns.
 

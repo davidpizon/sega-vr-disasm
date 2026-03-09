@@ -18,10 +18,10 @@
  |                                   |
  |                        display_list_processor (0x0222301C)
  |                                   |
- |                        func_001 (main coordinator)
+ |                        main_coordinator_short (main coordinator)
  |                            |
- |                        func_005 (transform setup)
- |                            ├─> func_006 (MAC.L multiply) ← TARGET
+ |                        transform_loop (transform setup)
+ |                            ├─> matrix_multiply (MAC.L multiply) ← TARGET
  |                            └─> JSR @R14 (per-vertex callback)
  |                                   |
  |<-- COMM4 = done -----------------|
@@ -31,13 +31,13 @@
 
 | Function | Address | Size | Purpose |
 |----------|---------|------|---------|
-| func_001 | 0x0222301C | 74 B | Main coordinator |
-| func_005 | 0x022230E6 | 46 B | Transform loop (calls func_006) |
-| func_006 | 0x02223114 | 98 B | **MAC.L matrix multiply** |
-| func_007 | 0x02223176 | 44 B | Alt transform loop (calls func_008) |
-| func_008 | 0x022231A2 | 66 B | **MAC.L matrix multiply variant** |
+| main_coordinator_short | 0x0222301C | 74 B | Main coordinator |
+| transform_loop | 0x022230E6 | 46 B | Transform loop (calls matrix_multiply) |
+| matrix_multiply | 0x02223114 | 98 B | **MAC.L matrix multiply** |
+| alt_transform_loop | 0x02223176 | 44 B | Alt transform loop (calls alt_matrix_multiply) |
+| alt_matrix_multiply | 0x022231A2 | 66 B | **MAC.L matrix multiply variant** |
 
-### 1.3 func_005 Loop Structure
+### 1.3 transform_loop Loop Structure
 
 ```assembly
 ; From SH2_3D_FUNCTION_REFERENCE.md analysis
@@ -49,7 +49,7 @@
 .loop:
 02223100  4E0B     JSR     @R14               ; Per-vertex callback
 02223102  60D5     MOV.W   @R13+,R0           ; Load parameter (delay slot)
-02223104  B00B     BSR     func_006           ; Matrix multiply
+02223104  B00B     BSR     matrix_multiply           ; Matrix multiply
 02223106  0028     CLRMAC                     ; Clear MAC (delay slot)
 02223108  4B10     DT      R11                ; Decrement counter (R11 = vertex count)
 0222310A  8FF9     BF/S    .loop              ; Loop if not zero
@@ -163,7 +163,7 @@ Master Side:
 
 ### 3.3 Strategy C: Modified Transform Function
 
-Replace func_006 with a version that:
+Replace matrix_multiply with a version that:
 1. Uses cache-through addresses (0x22000760 instead of 0xC0000760)
 2. OR writes through cache on every store
 
@@ -246,7 +246,7 @@ For Strategy A, staging area needs:
 
 ## 5. Hook Point Analysis
 
-### 5.1 Option 1: Hook at func_001 Entry
+### 5.1 Option 1: Hook at main_coordinator_short Entry
 
 **Location:** 0x0222301C (main coordinator)
 
@@ -256,9 +256,9 @@ For Strategy A, staging area needs:
 - Slave processes second half while Master processes first half
 - Synchronize at loop end
 
-**Difficulty:** HIGH - func_001 is a complex coordinator with many state dependencies
+**Difficulty:** HIGH - main_coordinator_short is a complex coordinator with many state dependencies
 
-### 5.2 Option 2: Hook at func_005 Loop
+### 5.2 Option 2: Hook at transform_loop Loop
 
 **Location:** 0x022230E6 (transform loop)
 

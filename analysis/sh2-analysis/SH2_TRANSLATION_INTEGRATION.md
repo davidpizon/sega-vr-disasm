@@ -5,16 +5,16 @@
 
 ## Overview
 
-All 92 SH2 3D engine function IDs (func_000 through func_091) are fully integrated into the build system. Source files in `disasm/sh2/3d_engine/` are assembled via Makefile rules into `.inc` files (in `disasm/sh2/generated/`) which are included by the ROM section files.
+All 92 SH2 3D engine function IDs (data_copy through poll_copy_short) are fully integrated into the build system. Source files in `disasm/sh2/3d_engine/` are assembled via Makefile rules into `.inc` files (in `disasm/sh2/generated/`) which are included by the ROM section files.
 
 ## Integration Summary
 
 | Category | Count | Details |
 |----------|-------|---------|
-| Individual .inc files | 74 | func_000 through func_091 (some grouped) |
+| Individual .inc files | 74 | data_copy through poll_copy_short (some grouped) |
 | Grouped into combined .inc | 12 | func_003+004, func_014+015, func_027+028 (in 026), func_029+030+031, func_037+038+039 |
 | Numbering gaps (no address space) | 2 | func_035, func_064 |
-| Covered by existing includes | 8 | func_056-059 (by func_055+065), func_060-063 (by func_051-054) |
+| Covered by existing includes | 8 | func_056-059 (by unrolled_copy_short+065), func_060-063 (by offset_bsr_short-054) |
 | Expansion ROM functions | 12 | batch_copy_handler, cmd22_single_shot, cmd27_queue_drain, etc. |
 | **Total function IDs** | **92** | **All accounted for** |
 
@@ -26,11 +26,11 @@ These function IDs are combined into a single .inc file because they share code 
 
 | .inc File | Contains | Notes |
 |-----------|----------|-------|
-| func_003_004.inc | func_003, func_004 | Offset copy pair |
-| func_014_015.inc | func_014, func_015 | VDP copy pair |
-| func_026.inc | func_026, func_027, func_028 | Bounds compare + 2 shared exit paths |
-| func_029_030_031.inc | func_029, func_030, func_031 | Visibility + shared exit paths |
-| func_037_038_039.inc | func_037, func_038, func_039 | Helper trio |
+| offset_copy_short.inc | func_003, func_004 | Offset copy pair |
+| vdp_copy_short.inc | func_014, func_015 | VDP copy pair |
+| bounds_compare_short.inc | bounds_compare_short, func_027, func_028 | Bounds compare + 2 shared exit paths |
+| visibility_short.inc | func_029, func_030, func_031 | Visibility + shared exit paths |
+| helpers_short.inc | func_037, func_038, func_039 | Helper trio |
 
 ### Numbering Gaps
 
@@ -38,8 +38,8 @@ These function IDs do not correspond to any address space in the ROM:
 
 | ID | Between | Explanation |
 |----|---------|-------------|
-| func_035 | func_034 ($237D5) → func_036 ($237D6) | Contiguous — no gap |
-| func_064 | func_055 ($23F2B) → func_065 ($23F2C) | Contiguous — no gap |
+| func_035 | span_filler_short ($237D5) → render_dispatch_short ($237D6) | Contiguous — no gap |
+| func_064 | unrolled_copy_short ($23F2B) → unrolled_data_copy ($23F2C) | Contiguous — no gap |
 
 ### Subsumed Functions
 
@@ -47,14 +47,14 @@ These function IDs were originally identified as separate entry points but are c
 
 | IDs | Covered By | Explanation |
 |-----|-----------|-------------|
-| func_056-059 | func_055 + func_065 | Makefile: "func_056 removed — code at $023F2E already covered by func_065" |
-| func_060-063 | func_051-054 | `func_060_063_raster_batch.asm` is documentation only (header: "DOCUMENTATION ONLY — not used by build system") |
+| func_056-059 | unrolled_copy_short + unrolled_data_copy | Makefile: "func_056 removed — code at $023F2E already covered by unrolled_data_copy" |
+| func_060-063 | offset_bsr_short-054 | `raster_batch.asm` is documentation only (header: "DOCUMENTATION ONLY — not used by build system") |
 
 ## Assembler Padding Issue — RESOLVED
 
 ### Problem
 
-The `sh-elf-as` assembler adds implicit alignment padding that causes byte-level size mismatches with the original ROM layout. This blocked early integration of func_001 (+1 byte) and func_002 (+9 bytes).
+The `sh-elf-as` assembler adds implicit alignment padding that causes byte-level size mismatches with the original ROM layout. This blocked early integration of main_coordinator_short (+1 byte) and case_handlers_short (+9 bytes).
 
 ### Solution: `.short` Format
 

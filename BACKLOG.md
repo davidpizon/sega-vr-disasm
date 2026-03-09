@@ -37,7 +37,7 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 ### B-004: Single-shot protocol for sh2_send_cmd (14 calls/frame)
 **Status:** DONE (2026-03-03) — v6-corrected protocol verified in PicoDrive (menus + race mode, 3600 frames).
 **v6-corrected design:** COMM2_HI ($A15124) is NEVER written — stays $00 permanently. Slave polls COMM2_HI for dispatch; keeping it $00 prevents all spurious dispatch. Layout: COMM0_HI=$01 trigger, COMM0_LO=$22 index (cleared by SH2 as handshake), COMM2_LO=D0/2, COMM3_HI=D1, COMM3_LO:COMM4=A0[23:0], COMM5:6=A1. COMM1 and COMM7 untouched.
-**SH2 handler:** `cmd22_single_shot` at expansion ROM $023010F0 (108 bytes). Reads params, clears COMM0_LO (handshake), performs block copy, calls func_084 for completion.
+**SH2 handler:** `cmd22_single_shot` at expansion ROM $023010F0 (108 bytes). Reads params, clears COMM0_LO (handshake), performs block copy, calls hw_init_short for completion.
 **68K sender:** 64 bytes at $00E35A (+ 26B NOP padding). Waits COMM0_HI==0, writes params, triggers COMM0, waits COMM0_LO==0 (params-consumed handshake).
 **Jump table:** $020808 → $023010F0 (expansion ROM handler).
 **Testing (2026-03-03):** PicoDrive profiling_frontend --autoplay: 3600 frames (menus + race mode). COMM2_HI=$0000 at every sample. No crashes, no visual glitches.
@@ -50,7 +50,7 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **What was done:**
 - Re-profiled with B-003+B-004 active: 68K still 100% (127,987 cyc/frame), Master SH2 0%, Slave 80%. Command overhead is ~4,000 cyc (3.1%), down from ~12,000+.
 - Converted `sh2_send_cmd_wait` ($E316) from 3-phase COMM6 handshake to single-shot protocol: COMM3:4=A0 (source), COMM5:6=A1 (dest), params-consumed handshake via COMM0_LO. Eliminates one COMM6 polling loop per call.
-- SH2 handler `cmd25_single_shot` at expansion ROM $300500 (64 bytes). Reads params, clears COMM0_LO, calls existing decompressor at $06005058, then func_084 for completion.
+- SH2 handler `cmd25_single_shot` at expansion ROM $300500 (64 bytes). Reads params, clears COMM0_LO, calls existing decompressor at $06005058, then hw_init_short for completion.
 - Jump table entry $25 at $020814 redirected from $06005024 → $02300500.
 - PicoDrive 3600-frame autoplay verified (menus + race mode). COMM2_HI=$0000 throughout.
 **Key files:** `disasm/sections/code_e200.asm`, `disasm/sh2/expansion/cmd25_single_shot.asm`, `disasm/sections/expansion_300000.asm`, `disasm/sections/code_20200.asm`
@@ -60,9 +60,9 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **Status:** REVERTED — all 3 patches disabled (2026-02-11)
 **Why:** Enable Slave CPU vertex transform offload (infrastructure built but dormant).
 **Result (2026-02-10):** 3 patches applied. ROM boots, menus work. **Crashes with stuck engine sound when entering race mode.**
-**Root cause (2026-02-11):** Patch #2 (master_dispatch_hook) writes every game command byte to COMM7. Game's cmd 0x27 (sent 21×/frame) triggers `cmd27_queue_drain` on the Slave with uninitialized queue data → random memory writes → crash. Three additional bugs in committed Patch #2: R0 clobbered, literal pool collision at $020480, COMM7 namespace collision. Reverting Patch #2 alone was insufficient — Patches #1 and #3 together also caused race-mode crashes (likely shadow_path_wrapper COMM7 barrier deadlock or data races from parallel func_021 execution on both CPUs). See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) and [MASTER_SH2_DISPATCH_ANALYSIS.md](analysis/architecture/MASTER_SH2_DISPATCH_ANALYSIS.md).
+**Root cause (2026-02-11):** Patch #2 (master_dispatch_hook) writes every game command byte to COMM7. Game's cmd 0x27 (sent 21×/frame) triggers `cmd27_queue_drain` on the Slave with uninitialized queue data → random memory writes → crash. Three additional bugs in committed Patch #2: R0 clobbered, literal pool collision at $020480, COMM7 namespace collision. Reverting Patch #2 alone was insufficient — Patches #1 and #3 together also caused race-mode crashes (likely shadow_path_wrapper COMM7 barrier deadlock or data races from parallel vertex_transform execution on both CPUs). See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) and [MASTER_SH2_DISPATCH_ANALYSIS.md](analysis/architecture/MASTER_SH2_DISPATCH_ANALYSIS.md).
 **Fix:** Full revert of all 3 patches to original game code. Expansion ROM code still exists but is dead (nothing jumps to it).
-**Patches:** ~~Slave idle ($0203CC→$02300200)~~ REVERTED, ~~Master dispatch ($02046A→$02300050)~~ REVERTED, ~~func_021 trampoline ($0234C8→$02300400)~~ REVERTED.
+**Patches:** ~~Slave idle ($0203CC→$02300200)~~ REVERTED, ~~Master dispatch ($02046A→$02300050)~~ REVERTED, ~~vertex_transform trampoline ($0234C8→$02300400)~~ REVERTED.
 **Key files:** `disasm/sections/code_20200.asm`, `disasm/sections/code_22200.asm`, `disasm/sections/expansion_300000.asm`
 **Next:** Requires redesign. Patches #1 and #3 need independent validation before re-activation. Test each patch in isolation with race-mode verification.
 
@@ -107,8 +107,8 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 
 ### B-011: Translate remaining SH2 functions to mnemonics
 **Status:** DONE (2026-02-28) — all 92 function IDs accounted for
-**Result:** All 92 SH2 function IDs (func_000-091) are integrated into the build system via 74 .inc files (some grouped). 46 use `.short` hex format to bypass assembler padding; 28 use mnemonic format with linker scripts.
-**Verification of "missing" IDs:** func_027/028 are in func_026.inc (shared exit paths). func_035/064 are numbering gaps (no address space between adjacent functions). func_056-059 are covered by func_055+065 (Makefile confirms). func_060-063 are covered by func_051-054 (doc-only source file).
+**Result:** All 92 SH2 function IDs (data_copy-091) are integrated into the build system via 74 .inc files (some grouped). 46 use `.short` hex format to bypass assembler padding; 28 use mnemonic format with linker scripts.
+**Verification of "missing" IDs:** func_027/028 are in bounds_compare_short.inc (shared exit paths). func_035/064 are numbering gaps (no address space between adjacent functions). func_056-059 are covered by unrolled_copy_short+065 (Makefile confirms). func_060-063 are covered by offset_bsr_short-054 (doc-only source file).
 **Key files:** `disasm/sh2/3d_engine/`, `disasm/sh2/generated/`, [SH2_TRANSLATION_INTEGRATION.md](analysis/sh2-analysis/SH2_TRANSLATION_INTEGRATION.md)
 
 ### B-013: Fix SH2 address errors in COMM_REGISTER_USAGE_ANALYSIS.md

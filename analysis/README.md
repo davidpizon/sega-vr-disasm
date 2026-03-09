@@ -70,7 +70,7 @@ Performance analysis and optimization strategies.
 - `OPTIMIZATION_OPPORTUNITIES.md` - Identified targets
 - `OPTIMIZATION_LESSONS_LEARNED.md` - Key learnings
 - `68K_PRIORITY_8_OPTIMIZATION.md` / `68K_PRIORITY_9_OPTIMIZATION.md` - Priority optimizations
-- `FUNC_016_INLINING_INFEASIBILITY.md` - Why func_016 can't be inlined
+- `FUNC_016_INLINING_INFEASIBILITY.md` - Why coord_transform can't be inlined
 
 ---
 

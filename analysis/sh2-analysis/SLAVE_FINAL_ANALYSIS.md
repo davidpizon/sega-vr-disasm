@@ -10,13 +10,13 @@ Status: ✅ VERIFIED THROUGH USER QUESTIONS
 The questions raised in this document led to infrastructure development:
 
 - ✅ **Infrastructure complete**: `slave_work_wrapper` at $300200 polls COMM7
-- ✅ **Optimized code ready**: `func_021_optimized` at $300100 (with func_016 inlined)
+- ✅ **Optimized code ready**: `vertex_transform_optimized` at $300100 (with coord_transform inlined)
 - ✅ **Expansion ROM operational**: 1MB area at $300000-$3FFFFF accessible
-- ⏳ **NOT YET CONNECTED**: Current ROM uses original func_021, Slave remains at idle loop
+- ⏳ **NOT YET CONNECTED**: Current ROM uses original vertex_transform, Slave remains at idle loop
 
 **What we learned:**
 - Scenario B was correct: Slave had work infrastructure but minimal actual work
-- Solution designed: Redirect Slave to `slave_work_wrapper` + trampoline at func_021 entry
+- Solution designed: Redirect Slave to `slave_work_wrapper` + trampoline at vertex_transform entry
 - **Current state**: Code tagged as `v4.0-baseline` - ready for activation experiments
 
 **See:** [SLAVE_INJECTION_GUIDE.md](SLAVE_INJECTION_GUIDE.md) for infrastructure details.

@@ -44,7 +44,7 @@ All parallel processing hooks confirmed **DISABLED**:
 |------|------|--------|
 | `code_20200.asm` | 318 | "Original dispatch code (RESTORED)" |
 | `code_20200.asm` | 238 | "Original Slave idle loop (RESTORED)" |
-| `code_22200.asm` | 2322 | "func_021: Original implementation (RESTORED)" |
+| `code_22200.asm` | 2322 | "vertex_transform: Original implementation (RESTORED)" |
 | `code_e200.asm` | 3685 | "ASYNC: DISABLED (no space for init code)" |
 
 The expansion ROM infrastructure exists (`expansion_300000.asm`) but nothing calls into it.

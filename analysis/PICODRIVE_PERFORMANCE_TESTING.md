@@ -81,7 +81,7 @@ Frame 1740: COMM4=0338(+0)   COMM5=0000(+0) COMM7=0000
 |----------|---------------|--------------|------------------------|
 | COMM4 | 0x20004028 | Slave work counter | Increments on Slave activity |
 | COMM5 | 0x2000402A | **Vertex transform counter** | **+101 per transform in v4.0** |
-| COMM7 | 0x2000402E | **Master→Slave signal** | **0x16 when dispatching func_021** |
+| COMM7 | 0x2000402E | **Master→Slave signal** | **0x16 when dispatching vertex_transform** |
 
 ---
 
@@ -93,7 +93,7 @@ COMM5: 0000 (stays zero - Master does all transforms)
 COMM7: 0000 (no Slave signaling)
 ```
 
-The Master SH2 executes func_021 directly with no parallel processing.
+The Master SH2 executes vertex_transform directly with no parallel processing.
 
 ### v4.0 ROM (Parallel Processing)
 ```
@@ -101,7 +101,7 @@ COMM5: Incrementing by 101 per transform
 COMM7: Alternates 0x0000 / 0x0016 (signals sent to Slave)
 ```
 
-The func_021 trampoline at $0234C8:
+The vertex_transform trampoline at $0234C8:
 1. Captures parameters (R14, R7, R8, R5) to 0x2203E000
 2. Writes COMM7 = 0x16 (signals Slave)
 3. Returns immediately (Master continues)
@@ -109,7 +109,7 @@ The func_021 trampoline at $0234C8:
 The Slave SH2:
 1. Polls COMM7 in loop at $300200
 2. When COMM7 = 0x16, loads parameters from 0x2203E000
-3. Executes `func_021_optimized` at $300100
+3. Executes `vertex_transform_optimized` at $300100
 4. Increments COMM5 by 101 on completion
 
 **Performance Impact**:
@@ -197,7 +197,7 @@ Even with fixed PicoDrive, v4.0 ROM Slave remains stuck at PC=0x06000596:
 The expansion ROM infrastructure is complete:
 - ✅ `slave_work_wrapper` at 0x02300200 polls COMM7
 - ✅ `slave_test_func` at 0x02300280 reads parameters from 0x2203E000
-- ✅ `func_021_optimized` at 0x02300100 executes transform
+- ✅ `vertex_transform_optimized` at 0x02300100 executes transform
 
 Missing piece: **Redirect Slave to expansion ROM at boot**
 

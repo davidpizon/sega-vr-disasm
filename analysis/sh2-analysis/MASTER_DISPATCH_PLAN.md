@@ -6,7 +6,7 @@
 
 **Current status (v4.0):**
 - ✅ **Master dispatch hook** at $300050 - routes commands, skips COMM7 for cmd 0x16
-- ✅ **func_021 trampoline** at $0234C8 - captures params, signals Slave via COMM7=0x16
+- ✅ **vertex_transform trampoline** at $0234C8 - captures params, signals Slave via COMM7=0x16
 - ✅ **Slave work wrapper** at $300200 - polls COMM7, dispatches to handlers
 - ✅ **Parameter passing** via 0x2203E000 (cache-through SDRAM)
 

@@ -28,15 +28,15 @@ Entry Point
     │
     ▼
 ┌─────────────────────────────────────────┐
-│  func_001 (0x0222301C)                  │  Main Coordinator
-│  ├─> func_005 (0x022230E6)              │  Matrix Transform Setup
-│  │   ├─> func_006 (0x02223114) [LEAF]   │  MAC.L Matrix Multiply
+│  main_coordinator_short (0x0222301C)                  │  Main Coordinator
+│  ├─> transform_loop (0x022230E6)              │  Matrix Transform Setup
+│  │   ├─> matrix_multiply (0x02223114) [LEAF]   │  MAC.L Matrix Multiply
 │  │   └─> JSR @R14                        │  Indirect: Per-vertex callback
-│  ├─> func_007 (0x02223176)              │  Alt Transform Setup
-│  │   ├─> func_008 (0x022231A2) [LEAF]   │  MAC.L Matrix Multiply (variant)
+│  ├─> alt_transform_loop (0x02223176)              │  Alt Transform Setup
+│  │   ├─> alt_matrix_multiply (0x022231A2) [LEAF]   │  MAC.L Matrix Multiply (variant)
 │  │   └─> JSR @R14                        │  Indirect: Per-vertex callback
-│  ├─> func_009 (0x022231E4) [LEAF]        │  Result Processor
-│  └─> func_010 (0x02223202) [LEAF]        │  Result Processor (variant)
+│  ├─> display_list_4elem (0x022231E4) [LEAF]        │  Result Processor
+│  └─> display_list_3elem (0x02223202) [LEAF]        │  Result Processor (variant)
 └─────────────────────────────────────────┘
 ```
 
@@ -44,17 +44,17 @@ Entry Point
 
 ```
 ┌─────────────────────────────────────────┐
-│  func_018 (0x022233A2)                  │  Polygon Coordinator
-│  ├─> func_016 (0x0222335A) [LEAF] ⭐    │  HOTSPOT: Called 4×
-│  └─> func_020 (0x02223468)              │  Polygon Transform
-│      ├─> func_020 (0x02223468)          │  Recursive/loop structure
-│      └─> func_023 (0x02223500)          │  Sub-polygon handler
+│  quad_batch_short (0x022233A2)                  │  Polygon Coordinator
+│  ├─> coord_transform (0x0222335A) [LEAF] ⭐    │  HOTSPOT: Called 4×
+│  └─> vertex_helper_short (0x02223468)              │  Polygon Transform
+│      ├─> vertex_helper_short (0x02223468)          │  Recursive/loop structure
+│      └─> frustum_cull_short (0x02223500)          │  Sub-polygon handler
 └─────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────┐
-│  func_019 (0x0222340C)                  │  Alt Polygon Path
-│  ├─> func_016 (0x0222335A) [LEAF] ⭐    │  HOTSPOT: Called 4×
-│  └─> func_020 (0x02223468)              │  Transform
+│  quad_batch_alt_short (0x0222340C)                  │  Alt Polygon Path
+│  ├─> coord_transform (0x0222335A) [LEAF] ⭐    │  HOTSPOT: Called 4×
+│  └─> vertex_helper_short (0x02223468)              │  Transform
 └─────────────────────────────────────────┘
 ```
 
@@ -63,16 +63,16 @@ Entry Point
 ```
 ┌─────────────────────────────────────────┐
 │  func_060 (0x02223E08)                  │  Extended Processor
-│  └─> func_065 (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
+│  └─> unrolled_data_copy (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
 │                                         │
 │  func_061 (0x02223E32)                  │
-│  └─> func_065 (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
+│  └─> unrolled_data_copy (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
 │                                         │
 │  func_062 (0x02223E5C)                  │
-│  └─> func_065 (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
+│  └─> unrolled_data_copy (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
 │                                         │
 │  func_063 (0x02223E88)                  │
-│  └─> func_065 (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
+│  └─> unrolled_data_copy (0x02223F2C) [LEAF] ⭐    │  HOTSPOT: Called 4×
 └─────────────────────────────────────────┘
 ```
 
@@ -89,12 +89,12 @@ Functions that are never called by other functions in this region. Likely called
 - External ROM code
 
 **Top Entry Points**:
-- func_000 (0x0222300A) - Initialization sequence
-- func_001 (0x0222301C) - Main loop coordinator
-- func_002 (0x02223066) - Hardware setup
-- func_011 (0x0222321C) - Specialized processor
-- func_018 (0x022233A2) - Polygon batch processor
-- func_019 (0x0222340C) - Alt polygon processor
+- data_copy (0x0222300A) - Initialization sequence
+- main_coordinator_short (0x0222301C) - Main loop coordinator
+- case_handlers_short (0x02223066) - Hardware setup
+- display_list_loop (0x0222321C) - Specialized processor
+- quad_batch_short (0x022233A2) - Polygon batch processor
+- quad_batch_alt_short (0x0222340C) - Alt polygon processor
 
 ---
 
@@ -102,29 +102,29 @@ Functions that are never called by other functions in this region. Likely called
 
 Called multiple times from different locations. Core reusable components.
 
-**func_016 (0x0222335A)** ⭐ HOTTEST
+**coord_transform (0x0222335A)** ⭐ HOTTEST
 - Called 4 times
 - Leaf function (no outgoing calls)
 - Likely: Coordinate transformation or clipping utility
 - Size: ~44 bytes
 
-**func_065 (0x02223F2C)** ⭐ HOTTEST
+**unrolled_data_copy (0x02223F2C)** ⭐ HOTTEST
 - Called 4 times
 - Leaf function
 - Likely: Rasterization helper or pixel operation
 - Size: ~150 bytes
 
-**func_020 (0x02223468)**
+**vertex_helper_short (0x02223468)**
 - Called 3 times (including self-recursion)
-- Calls: func_020 (recursive), func_023
+- Calls: vertex_helper_short (recursive), frustum_cull_short
 - Likely: Recursive polygon subdivision or loop
 
-**func_008 (0x022231A2)**
+**alt_matrix_multiply (0x022231A2)**
 - Called 2 times
 - Leaf function with MAC.L sequences
 - Purpose: Matrix multiplication variant
 
-**func_009 (0x022231E4)**
+**display_list_4elem (0x022231E4)**
 - Called 2 times
 - Leaf function
 - Purpose: Result processing/packing
@@ -140,14 +140,14 @@ Functions that don't call any other functions. These are the actual "work" funct
 - Simple calculations
 
 **Examples**:
-- func_000 (0x0222300A) - Simple loop, 18 bytes
+- data_copy (0x0222300A) - Simple loop, 18 bytes
 - func_003 (0x022230CC) - Tiny utility, 16 bytes
 - func_004 (0x022230DC) - Tiny utility, 10 bytes
-- func_006 (0x02223114) - MAC.L matrix multiply, 98 bytes
-- func_008 (0x022231A2) - MAC.L matrix multiply variant, 66 bytes
-- func_013 (0x022232C4) - Medium complexity, 68 bytes
-- func_016 (0x0222335A) - Hot utility, 44 bytes
-- func_065 (0x02223F2C) - Hot utility, 150 bytes
+- matrix_multiply (0x02223114) - MAC.L matrix multiply, 98 bytes
+- alt_matrix_multiply (0x022231A2) - MAC.L matrix multiply variant, 66 bytes
+- vdp_init_short (0x022232C4) - Medium complexity, 68 bytes
+- coord_transform (0x0222335A) - Hot utility, 44 bytes
+- unrolled_data_copy (0x02223F2C) - Hot utility, 150 bytes
 
 ---
 
@@ -155,18 +155,18 @@ Functions that don't call any other functions. These are the actual "work" funct
 
 Functions that call other functions to orchestrate work.
 
-**func_001 (0x0222301C)**
-- Calls: func_005, func_007, func_009, func_010
+**main_coordinator_short (0x0222301C)**
+- Calls: transform_loop, alt_transform_loop, display_list_4elem, display_list_3elem
 - Purpose: Main transformation coordinator
 - Size: 74 bytes
 
-**func_005 (0x022230E6)**
-- Calls: func_006, JSR @R14 (indirect)
+**transform_loop (0x022230E6)**
+- Calls: matrix_multiply, JSR @R14 (indirect)
 - Purpose: Matrix transform setup with callback
 - Size: 46 bytes
 
-**func_012 (0x02223268)**
-- Calls: func_008, func_009
+**display_entry (0x02223268)**
+- Calls: alt_matrix_multiply, display_list_4elem
 - Purpose: Transform pipeline stage
 - Size: 92 bytes
 
@@ -178,18 +178,18 @@ Functions that call other functions to orchestrate work.
 
 | Rank | Function | Address | Call Count | Type | Est. Impact |
 |------|----------|---------|------------|------|-------------|
-| 1 | func_016 | 0x0222335A | 4 | Leaf | Critical |
-| 2 | func_065 | 0x02223F2C | 4 | Leaf | Critical |
-| 3 | func_020 | 0x02223468 | 3 | Coordinator | High |
-| 4 | func_008 | 0x022231A2 | 2 | Leaf (MAC) | High |
-| 5 | func_009 | 0x022231E4 | 2 | Leaf | Medium |
-| 6 | func_023 | 0x02223500 | 2 | Unknown | Medium |
-| 7 | func_034 | 0x0222375C | 2 | Unknown | Medium |
-| 8 | func_043 | 0x022239AA | 2 | Unknown | Medium |
-| 9 | func_071 | 0x022241CC | 2 | Unknown | Medium |
-| 10| func_010 | 0x02223202 | 1 | Leaf | Low |
+| 1 | coord_transform | 0x0222335A | 4 | Leaf | Critical |
+| 2 | unrolled_data_copy | 0x02223F2C | 4 | Leaf | Critical |
+| 3 | vertex_helper_short | 0x02223468 | 3 | Coordinator | High |
+| 4 | alt_matrix_multiply | 0x022231A2 | 2 | Leaf (MAC) | High |
+| 5 | display_list_4elem | 0x022231E4 | 2 | Leaf | Medium |
+| 6 | frustum_cull_short | 0x02223500 | 2 | Unknown | Medium |
+| 7 | span_filler_short | 0x0222375C | 2 | Unknown | Medium |
+| 8 | polygon_batch_short | 0x022239AA | 2 | Unknown | Medium |
+| 9 | context_setup_short | 0x022241CC | 2 | Unknown | Medium |
+| 10| display_list_3elem | 0x02223202 | 1 | Leaf | Low |
 
-**Optimization Priority**: Focus on func_016 and func_065 first (4× calls, leaf functions = hot loops).
+**Optimization Priority**: Focus on coord_transform and unrolled_data_copy first (4× calls, leaf functions = hot loops).
 
 ---
 
@@ -200,8 +200,8 @@ Functions that call other functions to orchestrate work.
 **Occurrences**: 9 functions use JSR @R14 for indirect calls
 
 **Functions with JSR @R14**:
-- func_005 (0x022230E6) - Calls per-vertex transform handler
-- func_007 (0x02223176) - Calls per-vertex transform handler variant
+- transform_loop (0x022230E6) - Calls per-vertex transform handler
+- alt_transform_loop (0x02223176) - Calls per-vertex transform handler variant
 
 **Purpose**: Function pointer callbacks. R14 contains address of handler function, allowing runtime dispatch based on polygon type or rendering mode.
 
@@ -221,16 +221,16 @@ Functions that call other functions to orchestrate work.
 ### Functions 000-020
 
 ```
-func_000 (0x0222300A - 0x0222301A):
+data_copy (0x0222300A - 0x0222301A):
   (leaf function - no calls)
 
-func_001 (0x0222301C - 0x02223064):
-  -> func_005 (0x022230E6)
-  -> func_007 (0x02223176)
-  -> func_009 (0x022231E4)
-  -> func_010 (0x02223202)
+main_coordinator_short (0x0222301C - 0x02223064):
+  -> transform_loop (0x022230E6)
+  -> alt_transform_loop (0x02223176)
+  -> display_list_4elem (0x022231E4)
+  -> display_list_3elem (0x02223202)
 
-func_002 (0x02223066 - 0x022230CA):
+case_handlers_short (0x02223066 - 0x022230CA):
   -> func_003 (0x022230CC)
   -> func_004 (0x022230DC)
 
@@ -240,34 +240,34 @@ func_003 (0x022230CC - 0x022230DA):
 func_004 (0x022230DC - 0x022230E4):
   (leaf function - no calls)
 
-func_005 (0x022230E6 - 0x02223112):
-  -> func_006 (0x02223114)
+transform_loop (0x022230E6 - 0x02223112):
+  -> matrix_multiply (0x02223114)
   -> JSR_@R14 (indirect)
 
-func_006 (0x02223114 - 0x02223174):
+matrix_multiply (0x02223114 - 0x02223174):
   (leaf function - MAC.L heavy)
 
-func_007 (0x02223176 - 0x022231A0):
-  -> func_008 (0x022231A2)
+alt_transform_loop (0x02223176 - 0x022231A0):
+  -> alt_matrix_multiply (0x022231A2)
   -> JSR_@R14 (indirect)
 
-func_008 (0x022231A2 - 0x022231E2):
+alt_matrix_multiply (0x022231A2 - 0x022231E2):
   (leaf function - MAC.L heavy)
 
-func_009 (0x022231E4 - 0x02223200):
+display_list_4elem (0x022231E4 - 0x02223200):
   (leaf function)
 
-func_010 (0x02223202 - 0x0222321A):
+display_list_3elem (0x02223202 - 0x0222321A):
   (leaf function)
 
-func_011 (0x0222321C - 0x02223266):
-  -> func_012 (0x02223268)
+display_list_loop (0x0222321C - 0x02223266):
+  -> display_entry (0x02223268)
 
-func_012 (0x02223268 - 0x022232C2):
-  -> func_008 (0x022231A2)
-  -> func_009 (0x022231E4)
+display_entry (0x02223268 - 0x022232C2):
+  -> alt_matrix_multiply (0x022231A2)
+  -> display_list_4elem (0x022231E4)
 
-func_013 (0x022232C4 - 0x02223306):
+vdp_init_short (0x022232C4 - 0x02223306):
   (leaf function)
 
 func_014 (0x02223308 - 0x0222333E):
@@ -276,23 +276,23 @@ func_014 (0x02223308 - 0x0222333E):
 func_015 (0x02223340 - 0x02223358):
   (leaf function)
 
-func_016 (0x0222335A - 0x02223386): ⭐ HOTSPOT
+coord_transform (0x0222335A - 0x02223386): ⭐ HOTSPOT
   (leaf function - called 4 times)
 
-func_017 (0x02223388 - 0x022233A0):
-  -> func_016 (0x0222335A)
+quad_helper (0x02223388 - 0x022233A0):
+  -> coord_transform (0x0222335A)
 
-func_018 (0x022233A2 - 0x0222340A):
-  -> func_016 (0x0222335A)
-  -> func_020 (0x02223468)
+quad_batch_short (0x022233A2 - 0x0222340A):
+  -> coord_transform (0x0222335A)
+  -> vertex_helper_short (0x02223468)
 
-func_019 (0x0222340C - 0x02223466):
-  -> func_016 (0x0222335A)
-  -> func_020 (0x02223468)
+quad_batch_alt_short (0x0222340C - 0x02223466):
+  -> coord_transform (0x0222335A)
+  -> vertex_helper_short (0x02223468)
 
-func_020 (0x02223468 - 0x022234BE):
-  -> func_020 (0x02223468)  [RECURSIVE]
-  -> func_023 (0x02223500)
+vertex_helper_short (0x02223468 - 0x022234BE):
+  -> vertex_helper_short (0x02223468)  [RECURSIVE]
+  -> frustum_cull_short (0x02223500)
 ```
 
 *[Functions 021-108 follow similar patterns - see disasm/sh2_3d_engine_callgraph.txt for complete details]*
@@ -304,9 +304,9 @@ func_020 (0x02223468 - 0x022234BE):
 ### Path 1: Initialization (One-time)
 
 ```
-Entry → func_000 → Hardware Init → Return
+Entry → data_copy → Hardware Init → Return
         │
-        └─> func_002 → func_003 → Hardware Config
+        └─> case_handlers_short → func_003 → Hardware Config
                     └─> func_004 → Additional Setup
 ```
 
@@ -318,10 +318,10 @@ Entry → func_000 → Hardware Init → Return
 ### Path 2: Per-Frame Vertex Transform (Hot)
 
 ```
-Entry → func_001 → func_005 → func_006 (MAC.L) ⭐
+Entry → main_coordinator_short → transform_loop → matrix_multiply (MAC.L) ⭐
                             └─> JSR @R14 (callback)
                 │
-                └─> func_007 → func_008 (MAC.L) ⭐
+                └─> alt_transform_loop → alt_matrix_multiply (MAC.L) ⭐
                             └─> JSR @R14 (callback)
 ```
 
@@ -334,32 +334,32 @@ Entry → func_001 → func_005 → func_006 (MAC.L) ⭐
 ### Path 3: Polygon Processing (Hot)
 
 ```
-Entry → func_018 → func_016 ⭐ (4× calls)
-                └─> func_020 → func_023
-                            └─> func_020 (recursive)
+Entry → quad_batch_short → coord_transform ⭐ (4× calls)
+                └─> vertex_helper_short → frustum_cull_short
+                            └─> vertex_helper_short (recursive)
 
-Entry → func_019 → func_016 ⭐ (4× calls)
-                └─> func_020
+Entry → quad_batch_alt_short → coord_transform ⭐ (4× calls)
+                └─> vertex_helper_short
 ```
 
 **Frequency**: Per polygon, per frame (~800 polygons × 60 FPS = 48,000 calls/sec)
 **Performance Impact**: CRITICAL
-**Bottleneck**: func_016 called 4 times per polygon = 4× overhead
+**Bottleneck**: coord_transform called 4 times per polygon = 4× overhead
 
 ---
 
 ### Path 4: Extended Rendering (Hot)
 
 ```
-Entry → func_060 → func_065 ⭐
-Entry → func_061 → func_065 ⭐
-Entry → func_062 → func_065 ⭐
-Entry → func_063 → func_065 ⭐
+Entry → func_060 → unrolled_data_copy ⭐
+Entry → func_061 → unrolled_data_copy ⭐
+Entry → func_062 → unrolled_data_copy ⭐
+Entry → func_063 → unrolled_data_copy ⭐
 ```
 
 **Frequency**: Per pixel batch or rasterization unit
 **Performance Impact**: CRITICAL
-**Bottleneck**: func_065 is 150 bytes of tight code, likely pixel inner loop
+**Bottleneck**: unrolled_data_copy is 150 bytes of tight code, likely pixel inner loop
 
 ---
 
@@ -386,7 +386,7 @@ Size Range   Count   Purpose
 
 ### Recursive Functions
 
-**func_020 (0x02223468)**: Self-recursive
+**vertex_helper_short (0x02223468)**: Self-recursive
 - Purpose: Likely polygon subdivision or hierarchical processing
 - Max depth: Unknown (counter-based, likely bounded)
 - Optimization: Could unroll or iterate instead
@@ -399,18 +399,18 @@ The call graph reveals a well-structured 3D engine with clear separation of conc
 
 **Strengths**:
 - Modular design with small, focused functions
-- Clear hot paths through func_016 and func_065
+- Clear hot paths through coord_transform and unrolled_data_copy
 - Efficient use of leaf functions for performance-critical code
 - Indirect dispatch allows runtime flexibility
 
 **Optimization Targets**:
-1. **func_016** (hotspot) - Inline or optimize for 4× call reduction
-2. **func_065** (hotspot) - Likely pixel loop, optimize memory access
-3. **func_006/func_008** (MAC.L) - Already optimal, but check input data alignment
+1. **coord_transform** (hotspot) - Inline or optimize for 4× call reduction
+2. **unrolled_data_copy** (hotspot) - Likely pixel loop, optimize memory access
+3. **matrix_multiply/alt_matrix_multiply** (MAC.L) - Already optimal, but check input data alignment
 4. **JSR @R14** (indirect calls) - Consider direct calls if dispatch is predictable
 
 **Next Steps**:
-- Disassemble func_016 and func_065 in detail
+- Disassemble coord_transform and unrolled_data_copy in detail
 - Profile actual call frequencies on hardware
 - Measure cycle counts for hot paths
 - Identify cache miss patterns

@@ -32,9 +32,9 @@ The infrastructure for parallel processing is ready but **NOT YET ACTIVATED** in
 
 ```
 Designed flow (when activated):
-Game calls func_021 → Trampoline captures R14/R7/R8/R5 → COMM7=0x16
+Game calls vertex_transform → Trampoline captures R14/R7/R8/R5 → COMM7=0x16
                     → Master returns immediately (no work done)
-                    → Slave picks up work, executes func_021_optimized
+                    → Slave picks up work, executes vertex_transform_optimized
                     → Both CPUs running in parallel! (15-20% expected speedup - THEORETICAL/UNVALIDATED)
 ```
 
@@ -45,7 +45,7 @@ Game calls func_021 → Trampoline captures R14/R7/R8/R5 → COMM7=0x16
 - **R5**: Output pointer (not count/flags)
 
 **What's ready (infrastructure complete, activation pending):**
-- ✅ func_021_optimized at $300100 (96 bytes, func_016 inlined)
+- ✅ vertex_transform_optimized at $300100 (96 bytes, coord_transform inlined)
 - ✅ slave_work_wrapper at $300200 (COMM7 polling loop)
 - ✅ Parameter block design at 0x2203E000 (cache-through SDRAM, 16 bytes)
 - ✅ Shadow path validated (non-live testing)
@@ -54,7 +54,7 @@ Game calls func_021 → Trampoline captures R14/R7/R8/R5 → COMM7=0x16
 **Current reality:**
 - Infrastructure is built and tested via shadow path
 - Live activation not yet enabled in gameplay
-- func_021_optimized ready at $300100 (coordinate transform with func_016 inlined)
+- vertex_transform_optimized ready at $300100 (coordinate transform with coord_transform inlined)
 - Parameter block ready at $2203E000 (R14, R7, R8, R5 - 16 bytes)
 
 | Aspect | Before v4.0 | After v4.0 (when activated) |
@@ -346,11 +346,11 @@ The transform code uses addresses like 0xC0000740, 0xC0000760. This is NOT a sta
 - ✅ Vertex transform (0x0016): Slave increments COMM5
 
 ### ⚠️ Phase v4.0: Parallel Processing Infrastructure (COMPLETE - ACTIVATION PENDING)
-- ✅ func_021 trampoline design (captures R14/R7/R8/R5 parameters)
+- ✅ vertex_transform trampoline design (captures R14/R7/R8/R5 parameters)
 - ✅ Parameter block at $2203E000 (SDRAM, shared between SH2s)
 - ✅ Master dispatch hook at $300050 (skips COMM7 cmd $16)
 - ✅ Slave work wrapper at $300200 (COMM7 polling)
-- ✅ func_021_optimized at $300100 (with func_016 inlined)
+- ✅ vertex_transform_optimized at $300100 (with coord_transform inlined)
 - ✅ Shadow path validation (non-live testing)
 - ⏳ **LIVE ACTIVATION DEFERRED** - Timing concerns need validation
 

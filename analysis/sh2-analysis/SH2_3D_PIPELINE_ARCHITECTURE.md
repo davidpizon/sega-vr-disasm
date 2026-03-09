@@ -69,28 +69,28 @@ The following function mappings have been **verified through complete disassembl
 
 | Function | ROM Address | Size | Purpose |
 |----------|-------------|------|---------|
-| func_000 | 0x2300A-0x23023 | 26 B | Matrix/constant data copy (12 longwords to 0xC0000740) |
-| func_001 | 0x23024-0x2306E | 74 B | Main coordinator / switch dispatcher with dual entry points |
-| func_005 | 0x230E8-0x2311F | 56 B | Matrix transform loop with indirect dispatch |
-| func_006 | 0x23120-0x23178 | 88 B | Core MAC.L matrix × vector multiplication (~45 cycles/vertex) |
-| func_016 | 0x23368-0x2338A | 34 B | Coordinate packing (HOTSPOT: 17% frame budget) |
-| func_021 | 0x234C8-0x234ED | 38 B | Vertex transform loop (now offloaded to Slave SH2) |
+| data_copy | 0x2300A-0x23023 | 26 B | Matrix/constant data copy (12 longwords to 0xC0000740) |
+| main_coordinator_short | 0x23024-0x2306E | 74 B | Main coordinator / switch dispatcher with dual entry points |
+| transform_loop | 0x230E8-0x2311F | 56 B | Matrix transform loop with indirect dispatch |
+| matrix_multiply | 0x23120-0x23178 | 88 B | Core MAC.L matrix × vector multiplication (~45 cycles/vertex) |
+| coord_transform | 0x23368-0x2338A | 34 B | Coordinate packing (HOTSPOT: 17% frame budget) |
+| vertex_transform | 0x234C8-0x234ED | 38 B | Vertex transform loop (now offloaded to Slave SH2) |
 
 ### Visibility & Culling Pipeline
 
 | Function | ROM Address | Size | Purpose |
 |----------|-------------|------|---------|
-| func_023 | 0x23508-0x235F5 | 238 B | **LARGEST** - Frustum culling / visibility dispatcher |
-| func_024 | 0x235F6-0x23633 | 62 B | Screen coordinate calculator (3D to 2D) |
-| func_026 | (referenced) | - | Bounds comparison for visibility culling |
+| frustum_cull_short | 0x23508-0x235F5 | 238 B | **LARGEST** - Frustum culling / visibility dispatcher |
+| screen_coords_short | 0x235F6-0x23633 | 62 B | Screen coordinate calculator (3D to 2D) |
+| bounds_compare_short | (referenced) | - | Bounds comparison for visibility culling |
 
 ### Rendering & Rasterization Pipeline
 
 | Function | ROM Address | Size | Purpose |
 |----------|-------------|------|---------|
-| func_033 | 0x236FA-0x2375B | 98 B | Quad rendering / edge walking |
-| func_034 | 0x2375C-0x237D5 | 122 B | Span filler / edge interpolation (reciprocal table at 0x060048D0) |
-| func_040 | 0x2385E-0x238D7 | 122 B | Display list buffer setup (12-entry jump table) |
+| render_quad_short | 0x236FA-0x2375B | 98 B | Quad rendering / edge walking |
+| span_filler_short | 0x2375C-0x237D5 | 122 B | Span filler / edge interpolation (reciprocal table at 0x060048D0) |
+| display_list_short | 0x2385E-0x238D7 | 122 B | Display list buffer setup (12-entry jump table) |
 
 ### VDP & Hardware Interface
 
@@ -168,14 +168,14 @@ The following function mappings have been **verified through complete disassembl
 
 ### Stage 3: Vertex Transformation
 
-**Functions**: func_006 (0x02223120-0x02223178) and func_008 (0x022231A2-0x022231E2)
+**Functions**: matrix_multiply (0x02223120-0x02223178) and alt_matrix_multiply (0x022231A2-0x022231E2)
 
 **Purpose**: Transform 3D vertices from model space to screen coordinates using matrix multiplication.
 
-**Verified from Translation** (`disasm/sh2/3d_engine/func_006_matrix_multiply.asm`):
+**Verified from Translation** (`disasm/sh2/3d_engine/matrix_multiply.asm`):
 
 ```assembly
-; func_006: Core 3D transform using SH2 MAC (Multiply-Accumulate)
+; matrix_multiply: Core 3D transform using SH2 MAC (Multiply-Accumulate)
 ; Formula: V_out = M × V_in + T (with 16.16 fixed-point format)
 ; Performance: ~45 cycles per vertex
 
@@ -192,7 +192,7 @@ The following function mappings have been **verified through complete disassembl
 02223132  338C     ADD     R8,R3          ; Add translation
 02223134  1630     MOV.L   R3,@($0,R6)    ; Store result X
 ```
-**Repeat 3 times** for X, Y, Z components. func_008 uses similar MAC.L pattern.
+**Repeat 3 times** for X, Y, Z components. alt_matrix_multiply uses similar MAC.L pattern.
 
 **Key Features**:
 - Uses SH2 MAC (Multiply-Accumulate) for efficiency
@@ -263,7 +263,7 @@ struct PolygonDescriptor {
 ### Stage 5: Rasterization
 
 **Implementation**: Distributed across multiple leaf functions
-**Hotspot Functions**: func_016 (0x0222335A), func_065 (0x02223F2C)
+**Hotspot Functions**: coord_transform (0x0222335A), unrolled_data_copy (0x02223F2C)
 
 **Purpose**: Convert transformed polygons into pixels in frame buffer.
 
@@ -333,9 +333,9 @@ struct PolygonDescriptor {
 ## Function Entry Points
 
 **Primary Entry Points** (called from external/68K):
-- func_000 (0x0222300A) - Possible initialization
-- func_001 (0x0222301C) - Main loop entry?
-- func_018 (0x022233A2) - Rendering coordinator?
+- data_copy (0x0222300A) - Possible initialization
+- main_coordinator_short (0x0222301C) - Main loop entry?
+- quad_batch_short (0x022233A2) - Rendering coordinator?
 
 **Secondary Entry Points** (internal):
 - 0x02224000 - Data unpacker
@@ -348,24 +348,24 @@ struct PolygonDescriptor {
 
 ### Hot Path 1: Polygon Processing Chain
 ```
-func_018 (0x022233A2)
-  └─> func_016 (0x0222335A) [called 4×]
-      └─> func_020 (0x02223468)
-          └─> func_023 (0x02223500)
+quad_batch_short (0x022233A2)
+  └─> coord_transform (0x0222335A) [called 4×]
+      └─> vertex_helper_short (0x02223468)
+          └─> frustum_cull_short (0x02223500)
 ```
 
 ### Hot Path 2: Transformation Chain
 ```
-func_005 (0x022230E6)
-  └─> func_006 (0x02223114) [MAC.L sequence]
+transform_loop (0x022230E6)
+  └─> matrix_multiply (0x02223114) [MAC.L sequence]
       └─> JSR @R14 [indirect to per-polygon handler]
 ```
 
 ### Hot Path 3: Matrix Operations
 ```
-func_012 (0x02223268)
-  └─> func_008 (0x022231A2) [MAC.L heavy]
-      └─> func_009 (0x022231E4) [result processing]
+display_entry (0x02223268)
+  └─> alt_matrix_multiply (0x022231A2) [MAC.L heavy]
+      └─> display_list_4elem (0x022231E4) [result processing]
 ```
 
 ---
@@ -415,7 +415,7 @@ The Virtua Racing Deluxe 3D engine represents professional-grade early-90s 3D pr
 ## References
 
 - [SH2_3D_ENGINE_DATA_STRUCTURES.md](SH2_3D_ENGINE_DATA_STRUCTURES.md) - Structure definitions (Polygon descriptor, matrices, buffers)
-- [SH2_3D_FUNCTION_REFERENCE.md](SH2_3D_FUNCTION_REFERENCE.md) - Complete function list with addresses (func_006, func_008 MAC.L sequences)
+- [SH2_3D_FUNCTION_REFERENCE.md](SH2_3D_FUNCTION_REFERENCE.md) - Complete function list with addresses (matrix_multiply, alt_matrix_multiply MAC.L sequences)
 - [SH2_3D_CALL_GRAPH.md](SH2_3D_CALL_GRAPH.md) - Function relationships and call chains
 - [32X_FRAME_BUFFER_FORMAT.md](32X_FRAME_BUFFER_FORMAT.md) - Frame buffer architecture and VDP modes
 - [OPTIMIZATION_OPPORTUNITIES.md](OPTIMIZATION_OPPORTUNITIES.md) - Performance improvements
@@ -426,9 +426,9 @@ Complete annotated translations with ROM verification are in `disasm/sh2/3d_engi
 
 | Category | Key Files |
 |----------|-----------|
-| **Transform** | `func_006_matrix_multiply.asm`, `func_016_coord_transform.asm`, `func_021_original_short.asm` |
-| **Culling** | `func_023_frustum_cull.asm`, `func_024_screen_coords.asm` |
-| **Rendering** | `func_033_render_quad.asm`, `func_034_span_filler.asm`, `func_036_render_dispatch.asm` |
-| **Display** | `func_040_display_list_short.asm`, `func_040_059_display_engine.asm` |
-| **VDP** | `func_014_015_vdp_copy_short.asm`, `func_067_plus_vdp_hw.asm` |
-| **Coordination** | `func_001_main_coordinator.asm`, `master_command_loop.asm`, `slave_command_dispatcher.asm` |
+| **Transform** | `matrix_multiply.asm`, `coord_transform.asm`, `vertex_transform_orig.asm` |
+| **Culling** | `frustum_cull_short_frustum_cull.asm`, `screen_coords_short_screen_coords.asm` |
+| **Rendering** | `render_quad_short_render_quad.asm`, `span_filler_short_span_filler.asm`, `render_dispatch_short_render_dispatch.asm` |
+| **Display** | `display_list_short.asm`, `display_list_short_059_display_engine.asm` |
+| **VDP** | `vdp_copy_short.asm`, `rle_entry_alt1_short_plus_vdp_hw.asm` |
+| **Coordination** | `main_coordinator_short_main_coordinator.asm`, `master_command_loop.asm`, `slave_command_dispatcher.asm` |

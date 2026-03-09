@@ -2,35 +2,35 @@
 
 **Date**: January 6, 2026
 **Last Updated**: January 24, 2026
-**Attempted**: func_016 Inline Optimization
-**Result**: ✅ SUCCESS (func_021) / ❌ Complex (func_017-019)
+**Attempted**: coord_transform Inline Optimization
+**Result**: ✅ SUCCESS (vertex_transform) / ❌ Complex (quad_helper-019)
 **Lesson**: Expansion ROM approach works for standalone functions
-**Status**: Proof of concept validated for func_021; func_017-019 require different approach
+**Status**: Proof of concept validated for vertex_transform; quad_helper-019 require different approach
 
 ---
 
-## ✅ SUCCESSFUL OPTIMIZATION: func_021 (January 24, 2026)
+## ✅ SUCCESSFUL OPTIMIZATION: vertex_transform (January 24, 2026)
 
 ### Summary
 
-**func_021** (Coordinate Transform + Cull loop) was successfully optimized by:
+**vertex_transform** (Coordinate Transform + Cull loop) was successfully optimized by:
 1. Relocating the function to expansion ROM at `$0230003C`
-2. Inlining func_016 (coordinate transform) to eliminate BSR/RTS overhead
+2. Inlining coord_transform (coordinate transform) to eliminate BSR/RTS overhead
 3. Using a trampoline at the original location to redirect calls
 
-**Result**: Working ROM with func_016 inlined at one call site
+**Result**: Working ROM with coord_transform inlined at one call site
 
 ### Implementation Details
 
 | Component | Location | Size |
 |-----------|----------|------|
-| Trampoline | `$020234C8` (original func_021) | 12 bytes |
+| Trampoline | `$020234C8` (original vertex_transform) | 12 bytes |
 | Optimized function | `$0230003C` (expansion ROM) | 96 bytes |
-| Inlined func_016 | First 32 bytes of optimized | 32 bytes |
+| Inlined coord_transform | First 32 bytes of optimized | 32 bytes |
 
 **Cycle savings**: ~6 cycles/call × 800 polygons = **4,800 cycles/frame**
 
-### Why func_021 Worked (Unlike func_017-019)
+### Why vertex_transform Worked (Unlike quad_helper-019)
 
 1. **Standalone function**: No cross-function branching or shared code paths
 2. **Clean entry/exit**: Standard prologue/epilogue pattern
@@ -39,7 +39,7 @@
 ### Trampoline Pattern
 
 ```assembly
-; Original func_021 location ($020234C8) - now a trampoline
+; Original vertex_transform location ($020234C8) - now a trampoline
     MOV.L   @(1,PC),R0      ; $D001 - Load expansion address
     JMP     @R0             ; $402B - Jump to expansion ROM
     NOP                     ; $0009 - Delay slot
@@ -97,8 +97,8 @@
 
 | File | Purpose |
 |------|---------|
-| `disasm/sh2/expansion/func_021_optimized.asm` | Optimized SH2 source |
-| `disasm/sh2/generated/func_021_optimized.inc` | Generated dc.w opcodes |
+| `disasm/sh2/expansion/vertex_transform_optimized.asm` | Optimized SH2 source |
+| `disasm/sh2/generated/vertex_transform_optimized.inc` | Generated dc.w opcodes |
 | `disasm/sections/expansion_300000.asm` | Expansion ROM section |
 | `disasm/sections/code_22200.asm` | Trampoline at original location |
 
@@ -106,8 +106,8 @@
 
 ```bash
 # 1. Regenerate include file after editing source
-./tools/asm_to_dcw.sh disasm/sh2/expansion/func_021_optimized.asm \
-    disasm/sh2/generated/func_021_optimized.inc
+./tools/asm_to_dcw.sh disasm/sh2/expansion/vertex_transform_optimized.asm \
+    disasm/sh2/generated/vertex_transform_optimized.inc
 
 # 2. Rebuild ROM
 make all
@@ -136,13 +136,13 @@ The following section documents the **original failed attempts** before the expa
 
 **Original code at 0x02338C** (4 bytes):
 ```assembly
-BF EC    BSR $02223368    ; Call func_016
+BF EC    BSR $02223368    ; Call coord_transform
 00 09    NOP              ; Delay slot
 ```
 
 **Attempted replacement** (32 bytes):
 ```assembly
-; Inline func_016 body (32 bytes)
+; Inline coord_transform body (32 bytes)
 51 E7    MOV.L @($1C,R14),R1
 52 E8    MOV.L @($20,R14),R2
 ... (15 instructions total)
@@ -211,11 +211,11 @@ BF EC    BSR $02223368    ; Call func_016
 
 ---
 
-## Correct Approaches for func_016
+## Correct Approaches for coord_transform
 
 ### Option 1: Accept Reality ✅ **RECOMMENDED**
 
-**Conclusion**: func_016 cannot be efficiently inlined in this ROM without major restructuring.
+**Conclusion**: coord_transform cannot be efficiently inlined in this ROM without major restructuring.
 
 **Why**:
 - No nearby unused ROM space
@@ -241,7 +241,7 @@ BF EC    BSR $02223368    ; Call func_016
    - Patch callers to use relocated code
 
 3. **Insert inline code**
-   - Place func_016 body at original call site
+   - Place coord_transform body at original call site
    - Add jump to relocated code at end
 
 4. **Update all references**
@@ -265,10 +265,10 @@ BF EC    BSR $02223368    ; Call func_016
 ; Replace BSR with:
     CMP/EQ R14,R14      ; Always true (no-op but sets T flag)
     BT/S inline_code    ; Always taken, but uses delay slot well
-    MOV.L @($1C,R14),R1 ; (delay slot - start of func_016)
+    MOV.L @($1C,R14),R1 ; (delay slot - start of coord_transform)
 
 inline_code:
-    ; Continue with rest of func_016 inline...
+    ; Continue with rest of coord_transform inline...
     ; But we STILL have the expansion problem!
 ```
 
@@ -278,13 +278,13 @@ inline_code:
 
 ## What We Should Do Instead
 
-### Priority 1: func_065 FIFO Optimization ⭐⭐⭐
+### Priority 1: unrolled_data_copy FIFO Optimization ⭐⭐⭐
 
 **Why Better**:
-- func_065 is a **leaf function** (can be modified in isolation)
+- unrolled_data_copy is a **leaf function** (can be modified in isolation)
 - **Already fully unrolled** (no code expansion needed)
 - Only needs **code modification, not relocation**
-- **+10-15% potential gain** (better than func_016's +5%)
+- **+10-15% potential gain** (better than coord_transform's +5%)
 
 **What to do**:
 1. Profile R13 (stride) value to confirm destination
@@ -379,7 +379,7 @@ inline_code:
 
 ### Phase 1: Low-Hanging Fruit (Week of 2026-01-06)
 
-1. **Profile func_065 parameters** ✅ Easy, high value
+1. **Profile unrolled_data_copy parameters** ✅ Easy, high value
    - Determine if FIFO optimization applies
    - Potential: +10-15%
 
@@ -395,37 +395,37 @@ inline_code:
    - Potential: +2-3%
 
 4. **Remove redundant operations** ✅ Easy, low risk
-   - Remove final stride add in func_065
+   - Remove final stride add in unrolled_data_copy
    - Remove unnecessary pointer resets
    - Potential: +1-2%
 
 ### Phase 3: Skip
 
-5. **~~func_016 inlining~~** ❌ Not feasible without major restructuring
+5. **~~coord_transform inlining~~** ❌ Not feasible without major restructuring
 
 ---
 
 ## Conclusion
 
 **What we learned**:
-- ✅ **Expansion ROM approach WORKS** for standalone functions (func_021 proven)
-- ❌ func_017/018/019 have complex cross-function dependencies - require different strategy
+- ✅ **Expansion ROM approach WORKS** for standalone functions (vertex_transform proven)
+- ❌ quad_helper/018/019 have complex cross-function dependencies - require different strategy
 - Trampoline overhead (~4-6 cycles) is acceptable when saving 6+ cycles from inlining
 - **Critical**: 4-byte alignment, correct addresses, and instruction encoding verification
 
 **What we gained**:
-- **Working proof of concept**: func_021 with inlined func_016
+- **Working proof of concept**: vertex_transform with inlined coord_transform
 - Complete understanding of SH2 literal pool alignment requirements
 - Validated expansion ROM as optimization workspace
 - Reusable trampoline pattern for future optimizations
 
 **What's next**:
-1. **Extend func_016 inlining** to func_017/018/019 (complex, may need full block relocation)
+1. **Extend coord_transform inlining** to quad_helper/018/019 (complex, may need full block relocation)
 2. **Apply same pattern** to other hot functions that can be relocated
 3. Master/Slave workload distribution (validated sync; see `analysis/architecture/MASTER_SLAVE_ANALYSIS.md`)
 
 **Savings achieved**:
-- func_021 optimization: **~4,800 cycles/frame** (1 of 4 call sites)
+- vertex_transform optimization: **~4,800 cycles/frame** (1 of 4 call sites)
 - Potential with all 4 sites: **~19,200 cycles/frame** (~5% frame budget)
 
 **Overall impact**: POC validates the approach; full implementation could yield **+2-3 FPS**

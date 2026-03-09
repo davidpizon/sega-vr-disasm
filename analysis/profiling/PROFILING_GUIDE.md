@@ -77,19 +77,19 @@ python3 tools/gdb_profiler.py slave_cpu
 
 ---
 
-### 3. func_065 Profiler (Existing)
+### 3. unrolled_data_copy Profiler (Existing)
 
 **Command:**
 ```bash
-python3 tools/gdb_profiler.py func_065
+python3 tools/gdb_profiler.py unrolled_data_copy
 ```
 
 **What it does:**
-- Breaks at func_065 entry (0x02223F2E)
+- Breaks at unrolled_data_copy entry (0x02223F2E)
 - Captures R0 (index), R9 (framebuf), R10 (table), R13 (stride)
 - Counts call frequency
 
-**Status:** ✅ Complete - func_065 optimization abandoned
+**Status:** ✅ Complete - unrolled_data_copy optimization abandoned
 
 ---
 
@@ -318,7 +318,7 @@ After collecting profiling data:
 **Generated Scripts:**
 - `gdb_scripts/profile_vdp_polling.gdb`
 - `gdb_scripts/profile_slave_cpu.gdb`
-- `gdb_scripts/profile_func_065.gdb`
+- `gdb_scripts/profile_unrolled_data_copy.gdb`
 - `gdb_scripts/profile_hot_functions.gdb`
 - `gdb_scripts/trace_r13.gdb`
 - `gdb_scripts/dump_r10_table.gdb`
@@ -337,7 +337,7 @@ After collecting profiling data:
 |---------|---------|----------|--------|
 | vdp_polling | Track VDP polling loops | 🔥 HIGH | ✅ Ready |
 | slave_cpu | Analyze Slave CPU usage | 🔥 HIGH | ✅ Ready |
-| func_065 | Profile func_065 calls | N/A | ✅ Complete (abandoned) |
+| unrolled_data_copy | Profile unrolled_data_copy calls | N/A | ✅ Complete (abandoned) |
 | hot_functions | Count top function calls | ⬇️ LOW | ✅ Available |
 | r13_trace | Trace R13 register | ⬇️ LOW | ✅ Available |
 | r10_dump | Dump lookup table | ⬇️ LOW | ✅ Available |

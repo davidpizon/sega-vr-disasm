@@ -132,7 +132,7 @@ From hardware manual:
 ```
 $300000-$300027  handler_frame_sync (40 bytes)
 $300050-$30007B  master_dispatch_hook (44 bytes)
-$300100-$30015F  func_021_optimized (96 bytes)
+$300100-$30015F  vertex_transform_optimized (96 bytes)
 $300200-$30024B  slave_work_wrapper (76 bytes)
 $300280-$3002AB  slave_test_func (44 bytes)
 $300434-$3FFFFF  FREE (1+ MB)

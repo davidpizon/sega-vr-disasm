@@ -4,7 +4,7 @@
 
 This document is now partially historical. Key updates:
 - Slave idle loop at $0203CC redirected to `slave_work_wrapper` at $300200
-- func_021 trampoline at $0234C8 signals Slave via COMM7
+- vertex_transform trampoline at $0234C8 signals Slave via COMM7
 - **COMM4/5/7 now in active use** for Master→Slave communication
 
 **See:** [SLAVE_INJECTION_GUIDE.md](SLAVE_INJECTION_GUIDE.md) for current implementation.
@@ -131,7 +131,7 @@ $02051C: 0009          ; NOP (delay slot)
 
 ### ✅ Phase 3: Injection Points - COMPLETE
 - [x] Slave idle loop at $0203CC → redirected to $300200
-- [x] func_021 at $0234C8 → replaced with trampoline
+- [x] vertex_transform at $0234C8 → replaced with trampoline
 - [x] 1MB expansion ROM at $300000-$3FFFFF for new code
 - [x] **Parallel processing operational!**
 

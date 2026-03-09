@@ -136,9 +136,9 @@ Game Logic → WaitForVBlank() → Sets flag → Spins
 
 | Rank | Address | Calls | Function Name | Purpose |
 |------|---------|-------|---------------|---------|
-| **NEW** | **$020234C8** | **High** | **func_021_trampoline (SH2)** | **Parallel vertex transform (experimental)** |
+| **NEW** | **$020234C8** | **High** | **vertex_transform_trampoline (SH2)** | **Parallel vertex transform (experimental)** |
 
-**Note**: func_021_trampoline is **SH2 code**, not 68K. Listed separately to avoid confusion.
+**Note**: vertex_transform_trampoline is **SH2 code**, not 68K. Listed separately to avoid confusion.
 
 ---
 
@@ -373,7 +373,7 @@ main_loop
 
 ---
 
-## func_021_trampoline ($020234C8) - SH2 CODE (NEW v4.0) ⚠️ EXPERIMENTAL
+## vertex_transform_trampoline ($020234C8) - SH2 CODE (NEW v4.0) ⚠️ EXPERIMENTAL
 
 **⚠️ IMPORTANT**: This is **SH2 code**, NOT 68K code. Listed here for completeness only.
 
@@ -381,7 +381,7 @@ main_loop
 
 ```
 ; ═══════════════════════════════════════════════════════════════════════════
-; func_021_trampoline: Parallel Vertex Transform Dispatcher (SH2)
+; vertex_transform_trampoline: Parallel Vertex Transform Dispatcher (SH2)
 ; ═══════════════════════════════════════════════════════════════════════════
 ; Address: $020234C8 (SH2 code space - NOT 68K!)
 ; Called by: Game engine vertex processing (high frequency)
@@ -415,7 +415,7 @@ main_loop
 
 **Architecture Flow** (when activated):
 ```
-Game calls func_021
+Game calls vertex_transform
     ↓
 Trampoline at $0234C8
     ↓ (captures params)
@@ -423,7 +423,7 @@ Parameter Block $2203E000
     ↓ (signals via COMM7=$16)
 Master SH2 returns immediately ←── PARALLEL ──→ Slave SH2 picks up work
     ↓                                              ↓
-Continues with next task                    Executes func_021_optimized
+Continues with next task                    Executes vertex_transform_optimized
     ↓                                              ↓
 Both CPUs running in parallel!              Increments COMM5 (+101)
 (IF ACTIVATED)                                   (debug telemetry)
@@ -439,8 +439,8 @@ Both CPUs running in parallel!              Increments COMM5 (+101)
 **Related Components** (all SH2 code):
 - **master_dispatch_hook** ($02046A → $300050): Intercepts dispatch, skips COMM7 cmd $16
 - **slave_work_wrapper** ($300200): Slave command dispatcher (polling loop)
-- **slave_test_func** ($300280): Reads parameters, calls func_021_optimized
-- **func_021_optimized** ($300100): Optimized vertex transform (func_016 inlined)
+- **slave_test_func** ($300280): Reads parameters, calls vertex_transform_optimized
+- **vertex_transform_optimized** ($300100): Optimized vertex transform (coord_transform inlined)
 
 **Why Listed Here**: Although this is SH2 code, it's documented in 68K analysis because it impacts overall system architecture and inter-CPU communication patterns.
 

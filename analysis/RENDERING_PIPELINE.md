@@ -173,7 +173,7 @@ RTS (return immediately)                    read params, clear COMM7
                                             loop back to poll
 ```
 
-> **HAZARD:** COMM1 is a system signal register (func_084 manages bit 0 as "command done").
+> **HAZARD:** COMM1 is a system signal register (hw_init_short manages bit 0 as "command done").
 > COMM7 is the Slave doorbell. Never cross-purpose these registers — writing game
 > commands to COMM7 caused a B-006 crash. See [MASTER_SH2_DISPATCH_ANALYSIS.md](architecture/MASTER_SH2_DISPATCH_ANALYSIS.md).
 
@@ -196,7 +196,7 @@ $02046A: SHLL2 R0              ; × 4 (jump table offset)
 $02046C: R1 = $06000780        ; jump table base (SDRAM)
 $02046E: R0 = MOV.L @(R0,R1)  ; load handler address
 $020470: JSR @R0               ; call handler
-$020474: BRA → $020460         ; loop (NO func_084 — handlers manage COMM)
+$020474: BRA → $020460         ; loop (NO hw_init_short — handlers manage COMM)
 ```
 
 **Jump table** at SDRAM $06000780:
@@ -244,11 +244,11 @@ call graphs and register analysis, see
 |-------|-------------|---------|------|
 | 1. Init | $02224084 | VDP config, buffer setup | One-time |
 | 2. Data load | $02224000 | Unpack vertex/polygon data to SDRAM | Per scene |
-| 3. Vertex transform | func_006 ($23120) | MAC.L matrix × vector (16.16 fixed-point) | ~45 cycles/vertex |
+| 3. Vertex transform | matrix_multiply ($23120) | MAC.L matrix × vector (16.16 fixed-point) | ~45 cycles/vertex |
 | 4. Polygon processing | $02224060 | 20-byte descriptors, active flag, dispatch | ~50-60 cycles/poly |
-| 5. Visibility/culling | func_023 ($23508) | Frustum, Z-depth, screen bounds | 238 bytes (largest fn) |
-| 6. Rasterization | func_033/034 | Edge walking (MAC.W), span filling | Variable |
-| 7. Coordinate packing | func_016 ($23368) | Screen coord output | **17% frame budget** |
+| 5. Visibility/culling | frustum_cull_short ($23508) | Frustum, Z-depth, screen bounds | 238 bytes (largest fn) |
+| 6. Rasterization | render_quad_short/034 | Edge walking (MAC.W), span filling | Variable |
+| 7. Coordinate packing | coord_transform ($23368) | Screen coord output | **17% frame budget** |
 
 ### Key Implementation Details
 
@@ -368,7 +368,7 @@ This function is called from V-INT state 24 (`vint_state_fb_toggle`):
 ```
 
 **Key synchronization:** The swap only happens when COMM1_LO bit 0 is set — this is
-the "command done" signal managed by func_084 (or its inline equivalent in cmd22).
+the "command done" signal managed by hw_init_short (or its inline equivalent in cmd22).
 The 68K never swaps before the SH2 has finished all pixel work for the current frame.
 
 > **TIMING:** FS writes during active display are queued until the next V-blank.

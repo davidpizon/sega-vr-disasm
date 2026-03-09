@@ -451,11 +451,11 @@ MARSAdapterInit ($838)
 
 ---
 
-## func_0654 - 32X VDP Initialization ($00880654)
+## unrolled_data_copy4 - 32X VDP Initialization ($00880654)
 
 ```asm
 ; ═══════════════════════════════════════════════════════════════════════════
-; func_0654: 32X VDP Mode Setup
+; unrolled_data_copy4: 32X VDP Mode Setup
 ; ═══════════════════════════════════════════════════════════════════════════
 ; Address: $00880654 - $00880692
 ; Size: 62 bytes
@@ -505,11 +505,11 @@ MARSAdapterInit ($838)
 
 ---
 
-## func_0694 - Frame Buffer Clear ($00880694)
+## block_copy_stride_short4 - Frame Buffer Clear ($00880694)
 
 ```asm
 ; ═══════════════════════════════════════════════════════════════════════════
-; func_0694: Clear 32X Frame Buffer
+; block_copy_stride_short4: Clear 32X Frame Buffer
 ; ═══════════════════════════════════════════════════════════════════════════
 ; Address: $00880694 - $008806C2
 ; Size: 46 bytes
