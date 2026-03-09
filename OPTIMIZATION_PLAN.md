@@ -396,16 +396,23 @@ The Master SH2 is either completely idle (0% with hooks off) or lightly loaded (
 
 **Candidates for offload (ranked by PC profiling, March 2026):**
 
-| Function | 68K Share | PCs | Offloadable? |
-|----------|-----------|-----|-------------|
-| Angle Normalization | 2.3% | 24 | Yes — pure math, no side effects |
-| depth_sort | 2.1% | 11 | Maybe — already optimized (QW-4a), complex data deps |
-| Physics Integration | 1.9% | 15 | Yes — deterministic computation |
-| AI Opponent Select | 1.3% | 17 | Difficult — game state dependencies |
-| sine_cosine_quadrant_lookup | 1.0% | 9 | Yes — table lookup, easily parallelized |
-| rotational_offset_calc | 1.0% | 9 | Yes — pure math |
+| Function | 68K Share | Useful Share | PCs | Offloadable? |
+|----------|-----------|-------------|-----|-------------|
+| Angle Normalization | 2.3% | 4.5% | 24 | **Yes** — pure math, no side effects |
+| depth_sort | 2.1% | 4.2% | 11 | Maybe — already optimized (QW-4a), complex data deps |
+| Physics Integration | 1.9% | 3.8% | 15 | **Yes** — deterministic computation |
+| AI Opponent Select | 1.3% | 2.6% | 17 | Difficult — game state dependencies |
+| sine_cosine_quadrant_lookup | 1.0% | 2.0% | 9 | **Yes** — table lookup, easily parallelized |
+| rotational_offset_calc | 1.0% | 2.0% | 9 | **Yes** — pure math |
 
-**Combined offload potential:** ~9.6% of 68K budget (~12,300 cycles/frame)
+**Combined offload potential:** ~10.3% of useful 68K work (~5,300 useful cycles/frame)
+
+**Note:** "Useful Share" column excludes the 49.4% V-blank sync time. Offloading these functions reduces useful work per game frame → fewer TV frames per game frame → higher FPS.
+
+**68K Time Breakdown (PC profiling, March 2026):**
+- **49.4%** — V-blank synchronization polling ($FF0010/$FF0014 `TST.W VINT_STATE.w`). This is the BIOS adapter main loop waiting for V-blank between frame iterations. **Not eliminable** — hardware frame sync barrier.
+- **~10.8%** — SH2 command submission (sh2_cmd_27 COMM7 waits + sh2_send_cmd overhead). Reduced from ~22% by B-003/B-004/B-005.
+- **~39.8%** — Useful game logic (physics, AI, rendering prep, state management). This is the budget where offloading helps.
 
 **Data flow:** 68K writes inputs to shared SDRAM → signals Master SH2 → Master SH2 computes → writes results back → 68K reads results.
 
@@ -472,18 +479,21 @@ Profiling proved that SH2 cycle reduction does NOT improve FPS:
 |-------------|--------|--------------|--------|
 | coord_transform inlining | vertex_transform call chain | ~10% of vertex transform | ✅ Done in expansion ROM |
 | MAC loop unrolling | Matrix multiply | ~15% of multiply | Designed, not implemented |
-| Frame buffer FIFO batching | Rasterizer | 2.4x pixel write speed | Needs profiling |
+| ~~Frame buffer FIFO batching~~ | ~~Rasterizer~~ | ~~2.4x pixel write speed~~ | ❌ NOT feasible (B-009) |
 | SDRAM 16-byte alignment | Data structures | Burst read improvement | Needs profiling |
 | Delay loop reduction | Slave idle loop | 66.6% Slave reduction | ✅ Proven (no FPS gain) |
 
-#### Frame Buffer FIFO Detail (Hardware)
+#### Frame Buffer FIFO Detail (Hardware) — ❌ NOT FEASIBLE (B-009)
 
 The 32X frame buffer has a 4-word write FIFO:
 - Single write: 3 clock cycles/word
 - Burst write (4+ consecutive words): 5 cycles total = **1.25 cycles/word**
-- **Potential speedup: 2.4x** for frame buffer writes
 
-**Action:** Profile whether VRD already uses 4-word burst writes. If not, restructuring the rasterizer to write in 4-word bursts could significantly reduce rendering time.
+**Static analysis (March 2026) disproved this optimization:**
+- `func_065` (unrolled_data_copy): Writes to **SDRAM**, not framebuffer. FIFO irrelevant.
+- `edge_scan` (func_044): Scattered byte/word writes with variable stride. Cannot batch into 4-word bursts.
+- `cmd_27` (inline_slave_drain): 512-byte stride between rows — non-sequential by design.
+- **Bottom line:** SH2 is 78% utilized while 68K is at 100%. Even if FIFO bursts were possible, they wouldn't improve FPS.
 
 #### References
 - [OPTIMIZATION_OPPORTUNITIES.md](analysis/optimization/OPTIMIZATION_OPPORTUNITIES.md) — Hardware timing tables
@@ -732,7 +742,7 @@ Items requiring empirical measurement before implementation:
 
 1. ~~**RV bit during gameplay**~~ — RESOLVED (B-008): VRD never sets RV=1. Expansion ROM safe.
 2. **68K dead code in $00E200 section** — Can we reclaim 20+ bytes for the async shim?
-3. **Frame buffer FIFO burst patterns** — Does VRD already use 4-word bursts? If not, 2.4x rasterizer speedup available.
+3. ~~**Frame buffer FIFO burst patterns**~~ — RESOLVED (B-009, March 2026): NOT feasible. func_065 writes SDRAM not framebuffer; edge_scan uses scattered byte/word writes; SH2 is not the bottleneck.
 4. **SDRAM 16-byte alignment impact** — Do aligned data structures measurably improve burst reads?
 5. ~~**68K PC-level hotspots**~~ — RESOLVED (March 2026): WRAM 49.4% is **V-blank sync** (not COMM polling). WRAM caller tracking confirmed: callers are state dispatchers/frame orchestrators. Useful work: SH2 Cmd 27 = 21.7%, Angle Norm = 4.5%, depth_sort = 4.2%, Physics = 3.8%. Saving 33% useful work → 30 FPS. See `tools/libretro-profiling/README_68K_PC_PROFILING.md`.
 
@@ -764,4 +774,4 @@ Items requiring empirical measurement before implementation:
 
 ---
 
-**This plan reflects profiling data from January 2026 (frame-level) and March 2026 (PC-level hotspots) confirming the 68K as the primary bottleneck. PC profiling shows 49.4% COMM polling + 11.0% command submission = 60.4% blocking. All priorities restructured around 68K cycle relief.**
+**This plan reflects profiling data from January 2026 (frame-level) and March 2026 (PC-level hotspots + static analysis) confirming the 68K as the primary bottleneck. 49.4% of 68K time is V-blank sync (unavoidable), ~10.8% is command overhead (reduced by B-003/B-004/B-005), ~39.8% is useful work. Track 6 FIFO burst optimization disproved (B-009). Next priority: offload ~10.3% of useful work to idle Master SH2 (Track 4).**

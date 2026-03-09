@@ -85,10 +85,14 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **Impact:** Expansion ROM at $02300000+ is confirmed safe for SH2 execution at all times. No SDRAM copy mitigation needed. All Track 1+ optimization work can proceed without RV concerns.
 
 ### B-009: Profile frame buffer write patterns (FIFO bursts)
-**Status:** OPEN
+**Status:** NOT FEASIBLE (2026-03-08) — Static analysis disproved the optimization premise
 **Why:** 2.4x rasterizer speedup available if VRD isn't using 4-word FIFO bursts.
-**Approach:** PC-level hotspot profiling of SH2 frame buffer write addresses.
-**Acceptance:** Report on burst usage, potential cycle savings quantified.
+**Finding:** Three independent code paths analyzed:
+1. **func_065 (unrolled_data_copy)**: Writes to **SDRAM** ($06003E3C, $060086D4), NOT framebuffer. FIFO bursts don't apply to SDRAM.
+2. **edge_scan (func_044)**: Writes to framebuffer but uses **scattered byte/word writes** (`MOV.B R4,@R1`, `MOV.W R4,@R1`) with variable stride. Cannot be restructured for 4-word bursts without completely rewriting the rasterizer.
+3. **cmd_27 (inline_slave_drain)**: Uses `$0200` stride (512 bytes between rows) — inherently non-sequential, FIFO burst impossible.
+**Root cause:** The 68K is the bottleneck (100% utilization), not SH2 framebuffer writes. Even if FIFO bursts were possible, SH2 is only 78% utilized — saving SH2 cycles would not improve FPS.
+**Conclusion:** Track 6 FIFO batching removed from active opportunities.
 
 ---
 
