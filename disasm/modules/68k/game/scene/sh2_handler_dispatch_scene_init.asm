@@ -59,7 +59,7 @@ sh2_handler_dispatch_scene_init:
         btst    #7,($FFFFC81C).w                ; control mode bit 7?
         bne.s   .check_mask
         tst.w   ($FFFFC89C).w                   ; race_substate active?
-        dc.w    $6708                            ; beq.s $0058EA → external (skip mask)
+        beq.s   object_table_lookup_loop         ; $0058E0  beq.s → object_table_lookup_loop
 .check_mask:
         andi.w  #$0138,d0                       ; mask relevant bits
         dc.w    $6708                            ; beq.s $0058F0 → external (bits clear)

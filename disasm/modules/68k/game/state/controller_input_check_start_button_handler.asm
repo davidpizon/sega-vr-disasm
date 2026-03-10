@@ -39,12 +39,12 @@ controller_input_check_start_button_handler:
         or.b    ($FFFFC86E).w,D0               ; $0057F8  OR with P2 controller A
 .check_start:
         cmpi.b  #$70,D0                         ; $0057FC  start combo ($70)?
-        dc.w    $6720                           ; $005800  beq.s $005822 → exit (past fn)
+        beq.s   sound_queue_enable_flags_advance_state ; $005800  beq.s → exit (past fn)
         move.b  ($FFFFC86D).w,D0               ; $005802  D0 = P1 controller B
         btst    #4,($FFFFC80E).w               ; $005806  2-player mode?
         beq.s   .check_bit7                     ; $00580C  no → check bit 7
         or.b    ($FFFFC86F).w,D0               ; $00580E  OR with P2 controller B
 .check_bit7:
         btst    #7,D0                           ; $005812  bit 7 (action)?
-        dc.w    $6602                           ; $005816  bne.s $00581A → exit (past fn)
+        bne.s   set_timer_val                    ; $005816  bne.s → exit (past fn)
         rts                                     ; $005818

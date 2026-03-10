@@ -39,8 +39,8 @@ race_frame_update:
         move.w  d0,$004A(a0)                    ; clear object field +$4A
 ; --- 12 physics/update subroutine calls ---
         jsr     triple_guard_set_state_to_be(pc) ; $4EBA $1678
-        dc.w    $4EBA,$1AF0                      ; jsr $008548(pc)
-        dc.w    $4EBA,$2DA6                      ; jsr $009802(pc)
+        jsr     timer_decrement_multi(pc)         ; jsr $008548(pc)
+        jsr     suspension_steering_damping(pc)  ; jsr $009802(pc)
         jsr     object_anim_timer_speed_clear(pc) ; $4EBA $141A
         jsr     entity_pos_update(pc)   ; $4EBA $0534
         jsr     tire_screech_sound_trigger_053(pc) ; $4EBA $1270

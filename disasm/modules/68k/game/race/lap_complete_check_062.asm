@@ -32,7 +32,7 @@
 
 lap_complete_check_062:
         cmpi.w  #$FF9C,D0                       ; $007F64  speed < -100?
-        dc.w    $6C00,$009A         ; BGE.W   $008004    ; $007F68  no → external handler
+        bge.w   object_pos_compare_flag_set      ; $007F68  no → external handler
         addq.w  #1,$002E(A0)                     ; $007F6C  checkpoint_total++
         move.w  #$0497,$0008(A0)                 ; $007F70  sprite_id = $0497
         move.w  $002C(A0),D1                     ; $007F76  D1 = lap_count

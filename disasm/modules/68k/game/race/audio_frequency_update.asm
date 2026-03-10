@@ -56,9 +56,9 @@ audio_frequency_update:
         move.b  #$01,(a2)                       ; set update flag
 .check_state:
         cmpi.w  #$0000,($FFFFC8C8).w            ; vint_state = 0?
-        dc.w    $6748                            ; beq.s $0022AA → external handler (state 0)
+        beq.s   weighted_timer_average_a         ; $002260  beq.s → weighted_timer_average_a
         cmpi.w  #$0002,($FFFFC8C8).w            ; vint_state = 2?
-        dc.w    $6700,$0082                      ; beq.w $0022EC → external handler (state 2)
+        beq.w   weighted_timer_average_b         ; $002264  beq.w → weighted_timer_average_b
 ; --- frequency calculation: weighted shift average ---
         lsr.w   #5,d0                           ; port_data >> 5
         move.w  d0,d1                           ; D1 = port_data >> 5
@@ -70,7 +70,7 @@ audio_frequency_update:
         add.w   (a1),d1                         ; add current frequency
         lsr.w   #1,d1                           ; average (smooth)
         cmpi.w  #$1E00,d1                       ; above max?
-        dc.w    $6E0E                            ; bgt.s $002294 → external (clamp high)
+        bgt.s   randomized_timer_decrement_a     ; $002284  bgt.s → randomized_timer_decrement_a
         cmpi.w  #$1A5E,d1                       ; below min?
         dc.w    $6E0C                            ; bgt.s $002298 → external (above min, store)
         move.w  #$1A5E,d1                       ; clamp to minimum

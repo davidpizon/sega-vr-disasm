@@ -7,70 +7,35 @@
 ; 21 subsystems via BSR.
 ; ============================================================================
 entity_render_frame_orch:
-        dc.w    $0838        ; $00617A
-        dc.w    $0000        ; $00617C
-        dc.w    $C80E        ; $00617E
-        dc.w    $6600        ; $006180
-        dc.w    $00D6        ; $006182
-        dc.w    $11FC        ; $006184
-        dc.w    $0001        ; $006186
-        dc.w    $C800        ; $006188
-        dc.w    $7000        ; $00618A
-        dc.w    $3140        ; $00618C
-        dc.w    $0044        ; $00618E
-        dc.w    $3140        ; $006190
-        dc.w    $0046        ; $006192
-        dc.w    $3140        ; $006194
-        dc.w    $004A        ; $006196
-        dc.w    $4EBA        ; $006198
-        dc.w    $1F32        ; $00619A
-        dc.w    $4EBA        ; $00619C
-        dc.w    $23AA        ; $00619E
-        dc.w    $4EBA        ; $0061A0
-        dc.w    $3660        ; $0061A2
-        dc.w    $4EBA        ; $0061A4
-        dc.w    $1CD4        ; $0061A6
-        dc.w    $4EBA        ; $0061A8
-        dc.w    $0DEE        ; $0061AA
-        dc.w    $4EBA        ; $0061AC
-        dc.w    $1B2A        ; $0061AE
-        dc.w    $4EBA        ; $0061B0
-        dc.w    $0EF8        ; $0061B2
-        dc.w    $4EBA        ; $0061B4
-        dc.w    $0F94        ; $0061B6
-        dc.w    $4EBA        ; $0061B8
-        dc.w    $1494        ; $0061BA
-        dc.w    $4EBA        ; $0061BC
-        dc.w    $1D92        ; $0061BE
-        dc.w    $4EBA        ; $0061C0
-        dc.w    $3B0C        ; $0061C2
-        dc.w    $4EBA        ; $0061C4
-        dc.w    $4A78        ; $0061C6
-        dc.w    $4EBA        ; $0061C8
-        dc.w    $398A        ; $0061CA
-        dc.w    $4EBA        ; $0061CC
-        dc.w    $24FA        ; $0061CE
-        dc.w    $4EBA        ; $0061D0
-        dc.w    $CF54        ; $0061D2
-        dc.w    $4EBA        ; $0061D4
-        dc.w    $CF8A        ; $0061D6
-        dc.w    $4EBA        ; $0061D8
-        dc.w    $144A        ; $0061DA
-        dc.w    $4EBA        ; $0061DC
-        dc.w    $1170        ; $0061DE
-        dc.w    $4EBA        ; $0061E0
-        dc.w    $D4FC        ; $0061E2
-        dc.w    $4EBA        ; $0061E4
-        dc.w    $D5D0        ; $0061E6
-        dc.w    $4EBA        ; $0061E8
-        dc.w    $DD9C        ; $0061EA
-        dc.w    $4EBA        ; $0061EC
-        dc.w    $2E76        ; $0061EE
-        dc.w    $11F8        ; $0061F0
-        dc.w    $C304        ; $0061F2
-        dc.w    $C30C        ; $0061F4
-        dc.w    $3038        ; $0061F6
-        dc.w    $C8A0        ; $0061F8
-        dc.w    $0838        ; $0061FA
-        dc.w    $0007        ; $0061FC
-        dc.w    $C81C        ; $0061FE
+        btst    #0,($FFFFC80E).w                ; $00617A  scene flag bit 0 set?
+        bne.w   entity_render_pipeline_with_vdp_dma_2p_copy+24 ; $006180  yes → skip to 2P pipeline
+        move.b  #$01,($FFFFC800).w              ; $006184  mark scene active
+        moveq   #0,D0                           ; $00618A  clear D0
+        move.w  D0,$0044(A0)                    ; $00618C  clear display_offset
+        move.w  D0,$0046(A0)                    ; $006190  clear display_scale
+        move.w  D0,$004A(A0)                    ; $006194  clear display_aux
+        jsr     field_check_guard(pc)           ; $006198  $0080CC
+        jsr     timer_decrement_multi(pc)       ; $00619C  $008548
+        jsr     suspension_steering_damping(pc) ; $0061A0  $009802
+        jsr     object_anim_timer_speed_clear+6(pc) ; $0061A4  $007E7A
+        jsr     entity_pos_update(pc)           ; $0061A8  $006F98
+        jsr     multi_flag_test(pc)             ; $0061AC  $007CD8
+        jsr     angle_to_sine(pc)               ; $0061B0  $0070AA
+        jsr     object_link_copy_table_lookup(pc) ; $0061B4  $00714A
+        jsr     rotational_offset_calc(pc)      ; $0061B8  $00764E
+        jsr     position_threshold_check(pc)    ; $0061BC  $007F50
+        jsr     race_pos_sorting_and_rank_assignment+50(pc) ; $0061C0  $009CCE
+        jsr     effect_countdown(pc)            ; $0061C4  $00AC3E
+        jsr     set_camera_regs_to_invalid(pc)  ; $0061C8  $009B54
+        jsr     proximity_zone_multi(pc)        ; $0061CC  $0086C8
+        jsr     vdp_buffer_xfer_camera_offset_apply(pc) ; $0061D0  $003126
+        jsr     vdp_config_xfer_scaled_params(pc) ; $0061D4  $003160
+        jsr     conditional_object_velocity_negate(pc) ; $0061D8  $007624
+        jsr     object_geometry_visibility_collect(pc) ; $0061DC  $00734E
+        jsr     object_table_sprite_param_update(pc) ; $0061E0  $0036DE
+        jsr     object_proximity_check_jump_table_dispatch(pc) ; $0061E4  $0037B6
+        jsr     render_slot_setup+88(pc)        ; $0061E8  $003F86
+        jsr     scroll_pan_calc_vdp_write(pc)   ; $0061EC  $009064
+        move.b  ($FFFFC304).w,($FFFFC30C).w    ; $0061F0  copy render flags
+        move.w  ($FFFFC8A0).w,D0                ; $0061F6  D0 = frame counter
+        btst    #7,($FFFFC81C).w                ; $0061FA  bit 7 control flag set?

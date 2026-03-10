@@ -36,7 +36,7 @@ ai_target_check:
         lsl.w   #8,d0                   ; Index * 256 (entity stride)
         lea     (a1,d0.w),a1            ; $43F1 $0000 — point to entity
         jsr     proximity_distance_check(pc) ; $4EBA $00CA
-        dc.w    $6616                   ; BNE.S +22 → $AD14 (chain to next function)
+        bne.s   entity_target_action    ; BNE.S → $AD14 (chain to next function)
 
         ; --- Check second entity slot ---
         lea     ($FFFF9000).w,a1        ; $43F8 $9000 — entity table base
@@ -44,6 +44,6 @@ ai_target_check:
         lsl.w   #8,d0                   ; Index * 256 (entity stride)
         lea     (a1,d0.w),a1            ; $43F1 $0000 — point to entity
         jsr     proximity_distance_check(pc) ; $4EBA $00B6
-        dc.w    $6602                   ; BNE.S +2 → $AD14 (chain to next function)
+        bne.s   entity_target_action    ; BNE.S → $AD14 (chain to next function)
 .return:
         rts

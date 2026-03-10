@@ -61,7 +61,7 @@ object_collision_detection:
         neg.w   D0                              ; $00AF62  absolute value
 .diff_positive:
         cmp.w   ($FFFFC8CE).w,D0                    ; $00AF64  below speed threshold?
-        dc.w    $6F00,$0094         ; ble.w   $00AFFE             ; $00AF68  yes → collision_speed_apply
+        ble.w   position_separation             ; $00AF68  yes → collision_speed_apply
 ; --- compute post-collision speeds (weighted average) ---
         move.w  $0006(A0),D0                    ; $00AF6C  speed (player)
         add.w   $0006(A1),D0                    ; $00AF70  + speed (opponent)
@@ -92,7 +92,7 @@ object_collision_detection:
         move.w  $0004(A0),D3                    ; $00AFA6  velocity (player)
         sub.w   $0004(A1),D3                    ; $00AFAA  gap = player - opponent
         cmp.w   ($FFFFC8D0).w,D3                    ; $00AFAE  exceeds threshold?
-        dc.w    $6F0E               ; ble.s   $00AFC2             ; $00AFB2  no → return
+        ble.s   close_position_flags            ; $00AFB2  no → close_position_flags
         ori.w   #$0800,$0002(A0)                ; $00AFB4  set collision flag (player)
         ori.w   #$0800,$0002(A1)                ; $00AFBA  set collision flag (opponent)
 .no_collision:

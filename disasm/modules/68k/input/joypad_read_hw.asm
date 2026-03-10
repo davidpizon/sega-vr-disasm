@@ -47,7 +47,7 @@ joypad_read_hw:
         nop
         moveq   #$0F,d1                 ; Low nibble mask
         and.b   (a1),d1                 ; Read (TH=0, 3rd)
-        dc.w    $661C                   ; BNE.S joypad_read_3btn (3-button exit)
+        bne.s   joypad_read_3btn        ; $0018A6  BNE.S → joypad_read_3btn
 ; --- 6-button extra buttons ---
         move.b  d7,(a1)                 ; TH=1 (4th toggle)
         nop                             ; Timing

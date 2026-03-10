@@ -27,13 +27,13 @@
 controller_input_init:
 ; --- read controller IDs for all 3 ports ---
         moveq   #$00,d0                         ; port index 0
-        dc.w    $6100,$00B6                      ; bsr.w controller_id_read → $001992
+        bsr.w   joypad_read_port                 ; $0018DA  bsr.w → joypad_read_port
         move.b  d0,($FFFFC810).w                ; store port A ID
         moveq   #$01,d0                         ; port index 1
-        dc.w    $6100,$00AC                      ; bsr.w controller_id_read → $001992
+        bsr.w   joypad_read_port                 ; $0018E4  bsr.w → joypad_read_port
         move.b  d0,($FFFFC811).w                ; store port B ID
         moveq   #$02,d0                         ; port index 2
-        dc.w    $6100,$00A2                      ; bsr.w controller_id_read → $001992
+        bsr.w   joypad_read_port                 ; $0018EE  bsr.w → joypad_read_port
         move.b  d0,($FFFFC812).w                ; store port C ID
 ; --- request Z80 bus ---
         move.w  #$0100,Z80_BUSREQ

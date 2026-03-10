@@ -23,261 +23,200 @@
 ; ============================================================================
 
 collision_avoidance_speed_calc:
-        dc.w    $2668        ; $00A470  MOVEA.L $0018(A3),A3
-        dc.w    $0018        ; $00A472
-        dc.w    $3028        ; $00A474  MOVE.W $0024(A0),D0
-        dc.w    $0024        ; $00A476
-        dc.w    $3200        ; $00A478  MOVE.W D0,D1
-        dc.w    $D040        ; $00A47A  ADD.W D0,D0
-        dc.w    $D240        ; $00A47C  ADD.W D0,D1
-        dc.w    $D241        ; $00A47E  ADD.W D1,D1
-        dc.w    $21F3        ; $00A480  MOVE.L ($0C,A3,D1.W),($A000).W
-        dc.w    $100C        ; $00A482
-        dc.w    $A000        ; $00A484
-        dc.w    $303C        ; $00A486  MOVE.W #$0096,D0  (default speed = 150)
-        dc.w    $0096        ; $00A488
-        dc.w    $4A68        ; $00A48A  TST.W $006A(A0)
-        dc.w    $006A        ; $00A48C
-        dc.w    $661A        ; $00A48E  BNE.S +$1A
-        dc.w    $3028        ; $00A490  MOVE.W $000A(A0),D0
-        dc.w    $000A        ; $00A492
-        dc.w    $2278        ; $00A494  MOVEA.L ($C280).W,A1
-        dc.w    $C280        ; $00A496
-        dc.w    $3428        ; $00A498  MOVE.W $00C2(A0),D2
-        dc.w    $00C2        ; $00A49A
-        dc.w    $E642        ; $00A49C  ASR.W #3,D2
-        dc.w    $3431        ; $00A49E  MOVE.W (A1,D2.W),D2
-        dc.w    $2000        ; $00A4A0
-        dc.w    $C5F3        ; $00A4A2  MULS.W ($04,A3,D1.W),D2
-        dc.w    $1004        ; $00A4A4
-        dc.w    $E082        ; $00A4A6  ASR.L #8,D2
-        dc.w    $D042        ; $00A4A8  ADD.W D2,D0
-        dc.w    $3140        ; $00A4AA  MOVE.W D0,$0008(A0)
-        dc.w    $0008        ; $00A4AC
+        movea.l $0018(a0),a3            ; $00A470  load entity data pointer
+        move.w  $0024(a0),d0            ; $00A474  load speed table index
+        move.w  d0,d1                   ; $00A478  D1 = index
+        add.w   d0,d0                   ; $00A47A  D0 = index * 2
+        add.w   d0,d1                   ; $00A47C  D1 = index * 3
+        add.w   d1,d1                   ; $00A47E  D1 = index * 6
+        move.l  (12,a3,d1.w),($FFFFA000).w  ; $00A480  store table entry to RAM
+        move.w  #$0096,d0               ; $00A486  default speed = 150
+        tst.w   $006A(a0)              ; $00A48A  check override flag
+        bne.s   .label_A4AA            ; $00A48E  if set, skip table lookup
+        move.w  $000A(a0),d0            ; $00A490  load base speed
+        movea.l ($FFFFC280).w,a1        ; $00A494  load speed table pointer
+        move.w  $00C2(a0),d2            ; $00A498  load speed modifier
+        asr.w   #3,d2                   ; $00A49C  divide modifier by 8
+        move.w  (a1,d2.w),d2            ; $00A49E  look up modifier in table
+        muls.w  (4,a3,d1.w),d2         ; $00A4A2  multiply by entity factor
+        asr.l   #8,d2                   ; $00A4A6  scale result down
+        add.w   d2,d0                   ; $00A4A8  add modifier to speed
+.label_A4AA:
+        move.w  d0,$0008(a0)            ; $00A4AA  store final speed
 ; --- proximity gate ---
-        dc.w    $0828        ; $00A4AE  BTST #1,$0055(A0)
-        dc.w    $0001        ; $00A4B0
-        dc.w    $0055        ; $00A4B2
-        dc.w    $6700        ; $00A4B4  BEQ.W +$01B0 → $A666 (physics_integration)
-        dc.w    $01B0        ; $00A4B6
+        btst    #1,$0055(a0)            ; $00A4AE  check avoidance-enabled bit
+        beq.w   physics_integration     ; $00A4B4  if clear, skip to physics
 ; --- target entity lookup ---
-        dc.w    $3028        ; $00A4B8  MOVE.W $00A4(A0),D0
-        dc.w    $00A4        ; $00A4BA
-        dc.w    $6700        ; $00A4BC  BEQ.W +$023A → $A6F8 (no-target path)
-        dc.w    $023A        ; $00A4BE
-        dc.w    $43F8        ; $00A4C0  LEA ($9000).W,A1
-        dc.w    $9000        ; $00A4C2
-        dc.w    $E140        ; $00A4C4  ASL.W #8,D0
-        dc.w    $43F1        ; $00A4C6  LEA (A1,D0.W),A1
-        dc.w    $0000        ; $00A4C8
-        dc.w    $4A69        ; $00A4CA  TST.W $00A4(A1)
-        dc.w    $00A4        ; $00A4CC
-        dc.w    $6700        ; $00A4CE  BEQ.W +$0228 → $A6F8 (no-target path)
-        dc.w    $0228        ; $00A4D0
-        dc.w    $43F8        ; $00A4D2  LEA ($9000).W,A1
-        dc.w    $9000        ; $00A4D4
-        dc.w    $3028        ; $00A4D6  MOVE.W $00A6(A0),D0
-        dc.w    $00A6        ; $00A4D8
-        dc.w    $670A        ; $00A4DA  BEQ.S +$0A
-        dc.w    $0C68        ; $00A4DC  CMPI.W #$0082,$0004(A0)
-        dc.w    $0082        ; $00A4DE
-        dc.w    $0004        ; $00A4E0
-        dc.w    $6D00        ; $00A4E2  BLT.W +$0182 → $A666
-        dc.w    $0182        ; $00A4E4
-        dc.w    $E140        ; $00A4E6  ASL.W #8,D0
-        dc.w    $43F1        ; $00A4E8  LEA (A1,D0.W),A1
-        dc.w    $0000        ; $00A4EA
+        move.w  $00A4(a0),d0            ; $00A4B8  load target entity index
+        beq.w   collision_avoidance_no_target  ; $00A4BC  if zero, no-target path
+        lea     ($FFFF9000).w,a1        ; $00A4C0  entity table base
+        asl.w   #8,d0                   ; $00A4C4  index * 256 = byte offset
+        lea     (a1,d0.w),a1            ; $00A4C6  A1 = target entity
+        tst.w   $00A4(a1)              ; $00A4CA  check target's own target
+        beq.w   collision_avoidance_no_target  ; $00A4CE  if zero, no-target path
+        lea     ($FFFF9000).w,a1        ; $00A4D2  reload entity table base
+        move.w  $00A6(a0),d0            ; $00A4D6  load secondary index
+        beq.s   .label_A4E6            ; $00A4DA  if zero, skip validation
+        cmpi.w  #$0082,$0004(a0)        ; $00A4DC  check entity speed class
+        blt.w   physics_integration     ; $00A4E2  if below threshold, skip
+.label_A4E6:
+        asl.w   #8,d0                   ; $00A4E6  index * 256 = byte offset
+        lea     (a1,d0.w),a1            ; $00A4E8  A1 = secondary entity
 ; --- distance computation ---
-        dc.w    $3029        ; $00A4EC  MOVE.W $0030(A1),D0
-        dc.w    $0030        ; $00A4EE
-        dc.w    $9068        ; $00A4F0  SUB.W $0030(A0),D0
-        dc.w    $0030        ; $00A4F2
-        dc.w    $6A02        ; $00A4F4  BPL.S +2
-        dc.w    $4440        ; $00A4F6  NEG.W D0
-        dc.w    $3E29        ; $00A4F8  MOVE.W $0034(A1),D7
-        dc.w    $0034        ; $00A4FA
-        dc.w    $9E68        ; $00A4FC  SUB.W $0034(A0),D7
-        dc.w    $0034        ; $00A4FE
-        dc.w    $6A02        ; $00A500  BPL.S +2
-        dc.w    $4447        ; $00A502  NEG.W D7
-        dc.w    $DE40        ; $00A504  ADD.W D0,D7   (D7 = |dX| + |dY|)
-        dc.w    $3629        ; $00A506  MOVE.W $0072(A1),D3
-        dc.w    $0072        ; $00A508
-        dc.w    $9668        ; $00A50A  SUB.W $0072(A0),D3
-        dc.w    $0072        ; $00A50C
-        dc.w    $3C03        ; $00A50E  MOVE.W D3,D6
-        dc.w    $6A02        ; $00A510  BPL.S +2
-        dc.w    $4446        ; $00A512  NEG.W D6
+        move.w  $0030(a1),d0            ; $00A4EC  target X position
+        sub.w   $0030(a0),d0            ; $00A4F0  dX = target.X - self.X
+        bpl.s   .label_A4F8            ; $00A4F4  if positive, skip negate
+        neg.w   d0                      ; $00A4F6  D0 = |dX|
+.label_A4F8:
+        move.w  $0034(a1),d7            ; $00A4F8  target Y position
+        sub.w   $0034(a0),d7            ; $00A4FC  dY = target.Y - self.Y
+        bpl.s   .label_A504            ; $00A500  if positive, skip negate
+        neg.w   d7                      ; $00A502  D7 = |dY|
+.label_A504:
+        add.w   d0,d7                   ; $00A504  D7 = |dX| + |dY| (Manhattan)
+        move.w  $0072(a1),d3            ; $00A506  target Z position
+        sub.w   $0072(a0),d3            ; $00A50A  dZ = target.Z - self.Z
+        move.w  d3,d6                   ; $00A50E  D6 = signed dZ
+        bpl.s   .label_A514            ; $00A510  if positive, skip negate
+        neg.w   d6                      ; $00A512  D6 = |dZ|
 ; --- avoidance steering (threshold-based) ---
-        dc.w    $0C47        ; $00A514  CMPI.W #$0140,D7
-        dc.w    $0140        ; $00A516
-        dc.w    $6C00        ; $00A518  BGE.W +$0068 → $A582
-        dc.w    $0068        ; $00A51A
-        dc.w    $0C47        ; $00A51C  CMPI.W #$00A0,D7
-        dc.w    $00A0        ; $00A51E
-        dc.w    $6F0C        ; $00A520  BLE.S +$0C
-        dc.w    $3028        ; $00A522  MOVE.W $0004(A0),D0
-        dc.w    $0004        ; $00A524
-        dc.w    $9069        ; $00A526  SUB.W $0004(A1),D0
-        dc.w    $0004        ; $00A528
-        dc.w    $6E00        ; $00A52A  BGT.W +$0030 → $A55C
-        dc.w    $0030        ; $00A52C
-        dc.w    $0C46        ; $00A52E  CMPI.W #$0040,D6
-        dc.w    $0040        ; $00A530
-        dc.w    $6C28        ; $00A532  BGE.S +$28
-        dc.w    $7040        ; $00A534  MOVEQ #$40,D0
-        dc.w    $9046        ; $00A536  SUB.W D6,D0
-        dc.w    $4A43        ; $00A538  TST.W D3
-        dc.w    $6A02        ; $00A53A  BPL.S +2
-        dc.w    $4440        ; $00A53C  NEG.W D0
-        dc.w    $0C78        ; $00A53E  CMPI.W #$001C,($C07A).W
-        dc.w    $001C        ; $00A540
-        dc.w    $C07A        ; $00A542
-        dc.w    $670A        ; $00A544  BEQ.S +$0A
-        dc.w    $D040        ; $00A546  ADD.W D0,D0
-        dc.w    $3200        ; $00A548  MOVE.W D0,D1
-        dc.w    $D040        ; $00A54A  ADD.W D0,D0
-        dc.w    $D041        ; $00A54C  ADD.W D1,D0
-        dc.w    $6008        ; $00A54E  BRA.S +8
-        dc.w    $E540        ; $00A550  ASL.W #2,D0
-        dc.w    $3200        ; $00A552  MOVE.W D0,D1
-        dc.w    $E741        ; $00A554  ASL.W #3,D1
-        dc.w    $D041        ; $00A556  ADD.W D1,D0
-        dc.w    $D168        ; $00A558  ADD.W D0,$0040(A0)
-        dc.w    $0040        ; $00A55A
+.label_A514:
+        cmpi.w  #$0140,d7              ; $00A514  compare Manhattan dist to 320
+        bge.w   .label_A582            ; $00A518  if >= 320, try secondary path
+        cmpi.w  #$00A0,d7              ; $00A51C  compare to 160
+        ble.s   .label_A52E            ; $00A520  if <= 160, close range
+        move.w  $0004(a0),d0            ; $00A522  self speed class
+        sub.w   $0004(a1),d0            ; $00A526  compare with target
+        bgt.w   .label_A55C            ; $00A52A  if faster, skip to speed check
+.label_A52E:
+        cmpi.w  #$0040,d6              ; $00A52E  compare |dZ| to 64
+        bge.s   .label_A55C            ; $00A532  if >= 64, skip steering
+        moveq   #$40,d0                ; $00A534  D0 = 64
+        sub.w   d6,d0                   ; $00A536  D0 = 64 - |dZ| (proximity factor)
+        tst.w   d3                      ; $00A538  check signed dZ
+        bpl.s   .label_A53E            ; $00A53A  if positive, keep sign
+        neg.w   d0                      ; $00A53C  flip steering direction
+.label_A53E:
+        cmpi.w  #$001C,($FFFFC07A).w   ; $00A53E  check game mode flag
+        beq.s   .label_A550            ; $00A544  if == $1C, use alternate scale
+        add.w   d0,d0                   ; $00A546  D0 *= 2
+        move.w  d0,d1                   ; $00A548  D1 = D0
+        add.w   d0,d0                   ; $00A54A  D0 *= 2 (total *4)
+        add.w   d1,d0                   ; $00A54C  D0 += D1 (total *6)
+        bra.s   .label_A558            ; $00A54E  apply steering
+.label_A550:
+        asl.w   #2,d0                   ; $00A550  D0 *= 4
+        move.w  d0,d1                   ; $00A552  D1 = D0
+        asl.w   #3,d1                   ; $00A554  D1 *= 8 (original * 32)
+        add.w   d1,d0                   ; $00A556  D0 += D1 (total *36)
+.label_A558:
+        add.w   d0,$0040(a0)            ; $00A558  apply steering adjustment
 ; --- speed avoidance ---
-        dc.w    $0C47        ; $00A55C  CMPI.W #$0070,D7
-        dc.w    $0070        ; $00A55E
-        dc.w    $6C20        ; $00A560  BGE.S +$20
-        dc.w    $3029        ; $00A562  MOVE.W $0040(A1),D0
-        dc.w    $0040        ; $00A564
-        dc.w    $9068        ; $00A566  SUB.W $0040(A0),D0
-        dc.w    $0040        ; $00A568
-        dc.w    $3200        ; $00A56A  MOVE.W D0,D1
-        dc.w    $4A43        ; $00A56C  TST.W D3
-        dc.w    $6D02        ; $00A56E  BLT.S +2
-        dc.w    $4441        ; $00A570  NEG.W D1
-        dc.w    $4A41        ; $00A572  TST.W D1
-        dc.w    $6D0C        ; $00A574  BLT.S +$0C
-        dc.w    $0C41        ; $00A576  CMPI.W #$1800,D1
-        dc.w    $1800        ; $00A578
-        dc.w    $6C06        ; $00A57A  BGE.S +6
-        dc.w    $E240        ; $00A57C  ASR.W #1,D0
-        dc.w    $D168        ; $00A57E  ADD.W D0,$0040(A0)
-        dc.w    $0040        ; $00A580
+.label_A55C:
+        cmpi.w  #$0070,d7              ; $00A55C  compare Manhattan dist to 112
+        bge.s   .label_A582            ; $00A560  if >= 112, try secondary path
+        move.w  $0040(a1),d0            ; $00A562  target heading
+        sub.w   $0040(a0),d0            ; $00A566  heading delta
+        move.w  d0,d1                   ; $00A56A  D1 = heading delta
+        tst.w   d3                      ; $00A56C  check signed dZ
+        blt.s   .label_A572            ; $00A56E  if negative, skip negate
+        neg.w   d1                      ; $00A570  flip direction
+.label_A572:
+        tst.w   d1                      ; $00A572  check adjusted delta
+        blt.s   .label_A582            ; $00A574  if negative, skip
+        cmpi.w  #$1800,d1              ; $00A576  compare to threshold
+        bge.s   .label_A582            ; $00A57A  if >= $1800, skip
+        asr.w   #1,d0                   ; $00A57C  halve heading delta
+        add.w   d0,$0040(a0)            ; $00A57E  apply heading correction
 ; --- secondary entity path ---
-        dc.w    $45F8        ; $00A582  LEA ($9000).W,A2
-        dc.w    $9000        ; $00A584
-        dc.w    $3028        ; $00A586  MOVE.W $00A4(A0),D0
-        dc.w    $00A4        ; $00A588
-        dc.w    $E148        ; $00A58A  LSL.W #8,D0
-        dc.w    $43F2        ; $00A58C  LEA (A2,D0.W),A1
-        dc.w    $0000        ; $00A58E
-        dc.w    $3029        ; $00A590  MOVE.W $00A4(A1),D0
-        dc.w    $00A4        ; $00A592
-        dc.w    $6616        ; $00A594  BNE.S +$16
-        dc.w    $E148        ; $00A596  LSL.W #8,D0
-        dc.w    $45F2        ; $00A598  LEA (A2,D0.W),A2
-        dc.w    $0000        ; $00A59A
-        dc.w    $302A        ; $00A59C  MOVE.W $0024(A2),D0
-        dc.w    $0024        ; $00A59E
-        dc.w    $9069        ; $00A5A0  SUB.W $0024(A1),D0
-        dc.w    $0024        ; $00A5A2
-        dc.w    $0C40        ; $00A5A4  CMPI.W #$0004,D0
-        dc.w    $0004        ; $00A5A6
-        dc.w    $6E02        ; $00A5A8  BGT.S +2
-        dc.w    $43D2        ; $00A5AA  LEA (A2),A1
-        dc.w    $3029        ; $00A5AC  MOVE.W $0030(A1),D0
-        dc.w    $0030        ; $00A5AE
-        dc.w    $9068        ; $00A5B0  SUB.W $0030(A0),D0
-        dc.w    $0030        ; $00A5B2
-        dc.w    $6A02        ; $00A5B4  BPL.S +2
-        dc.w    $4440        ; $00A5B6  NEG.W D0
-        dc.w    $3E29        ; $00A5B8  MOVE.W $0034(A1),D7
-        dc.w    $0034        ; $00A5BA
-        dc.w    $9E68        ; $00A5BC  SUB.W $0034(A0),D7
-        dc.w    $0034        ; $00A5BE
-        dc.w    $6A02        ; $00A5C0  BPL.S +2
-        dc.w    $4447        ; $00A5C2  NEG.W D7
-        dc.w    $DE40        ; $00A5C4  ADD.W D0,D7
-        dc.w    $3629        ; $00A5C6  MOVE.W $0072(A1),D3
-        dc.w    $0072        ; $00A5C8
-        dc.w    $9668        ; $00A5CA  SUB.W $0072(A0),D3
-        dc.w    $0072        ; $00A5CC
-        dc.w    $3C03        ; $00A5CE  MOVE.W D3,D6
-        dc.w    $6A02        ; $00A5D0  BPL.S +2
-        dc.w    $4446        ; $00A5D2  NEG.W D6
-        dc.w    $3029        ; $00A5D4  MOVE.W $0006(A1),D0
-        dc.w    $0006        ; $00A5D6
-        dc.w    $9068        ; $00A5D8  SUB.W $0006(A0),D0
-        dc.w    $0006        ; $00A5DA
-        dc.w    $6C28        ; $00A5DC  BGE.S +$28
-        dc.w    $0C47        ; $00A5DE  CMPI.W #$01E0,D7
-        dc.w    $01E0        ; $00A5E0
-        dc.w    $6E22        ; $00A5E2  BGT.S +$22
-        dc.w    $0C47        ; $00A5E4  CMPI.W #$0040,D7
-        dc.w    $0040        ; $00A5E6
-        dc.w    $6F1C        ; $00A5E8  BLE.S +$1C
-        dc.w    $0C46        ; $00A5EA  CMPI.W #$0030,D6
-        dc.w    $0030        ; $00A5EC
-        dc.w    $6E16        ; $00A5EE  BGT.S +$16
-        dc.w    $0C68        ; $00A5F0  CMPI.W #$0064,$0004(A0)
-        dc.w    $0064        ; $00A5F2
-        dc.w    $0004        ; $00A5F4
-        dc.w    $6F0E        ; $00A5F6  BLE.S +$0E
-        dc.w    $323C        ; $00A5F8  MOVE.W #$01E0,D1
-        dc.w    $01E0        ; $00A5FA
-        dc.w    $9247        ; $00A5FC  SUB.W D7,D1
-        dc.w    $EC41        ; $00A5FE  ASR.W #6,D1
-        dc.w    $E360        ; $00A600  ROL.W (missing dest - encoded as dc.w)
-        dc.w    $D168        ; $00A602  ADD.W D0,$0008(A0)
-        dc.w    $0008        ; $00A604
-        dc.w    $0C46        ; $00A606  CMPI.W #$0070,D6
-        dc.w    $0070        ; $00A608
-        dc.w    $6C00        ; $00A60A  BGE.W +$0034 → $A640
-        dc.w    $0034        ; $00A60C
-        dc.w    $4A40        ; $00A60E  TST.W D0
-        dc.w    $6F06        ; $00A610  BLE.S +6
-        dc.w    $0C47        ; $00A612  CMPI.W #$00A0,D7
-        dc.w    $00A0        ; $00A614
-        dc.w    $6E28        ; $00A616  BGT.S +$28
-        dc.w    $4440        ; $00A618  NEG.W D0
-        dc.w    $E240        ; $00A61A  ASR.W #1,D0
-        dc.w    $0640        ; $00A61C  ADDI.W #$0A00,D0
-        dc.w    $0A00        ; $00A61E
-        dc.w    $3207        ; $00A620  MOVE.W D7,D1
-        dc.w    $E941        ; $00A622  ASL.W #4,D1
-        dc.w    $B041        ; $00A624  CMP.W D1,D0
-        dc.w    $6E18        ; $00A626  BGT.S +$18
-        dc.w    $0C46        ; $00A628  CMPI.W #$0040,D6
-        dc.w    $0040        ; $00A62A
-        dc.w    $6C12        ; $00A62C  BGE.S +$12
-        dc.w    $7040        ; $00A62E  MOVEQ #$40,D0
-        dc.w    $9046        ; $00A630  SUB.W D6,D0
-        dc.w    $4A43        ; $00A632  TST.W D3
-        dc.w    $6A02        ; $00A634  BPL.S +2
-        dc.w    $4440        ; $00A636  NEG.W D0
-        dc.w    $D040        ; $00A638  ADD.W D0,D0
-        dc.w    $D040        ; $00A63A  ADD.W D0,D0
-        dc.w    $D168        ; $00A63C  ADD.W D0,$0040(A0)
-        dc.w    $0040        ; $00A63E
+.label_A582:
+        lea     ($FFFF9000).w,a2        ; $00A582  entity table base
+        move.w  $00A4(a0),d0            ; $00A586  load target entity index
+        lsl.w   #8,d0                   ; $00A58A  index * 256
+        lea     (a2,d0.w),a1            ; $00A58C  A1 = primary target
+        move.w  $00A4(a1),d0            ; $00A590  load target's own target
+        bne.s   .label_A5AC            ; $00A594  if nonzero, use it
+        lsl.w   #8,d0                   ; $00A596  index * 256 (D0=0, no-op)
+        lea     (a2,d0.w),a2            ; $00A598  A2 = secondary target
+        move.w  $0024(a2),d0            ; $00A59C  secondary speed index
+        sub.w   $0024(a1),d0            ; $00A5A0  compare speeds
+        cmpi.w  #$0004,d0              ; $00A5A4  threshold check
+        bgt.s   .label_A5AC            ; $00A5A8  if much faster, keep A1
+        lea     (a2),a1                 ; $00A5AA  A1 = closer/slower entity
+.label_A5AC:
+        move.w  $0030(a1),d0            ; $00A5AC  target X position
+        sub.w   $0030(a0),d0            ; $00A5B0  dX
+        bpl.s   .label_A5B8            ; $00A5B4  if positive, skip negate
+        neg.w   d0                      ; $00A5B6  D0 = |dX|
+.label_A5B8:
+        move.w  $0034(a1),d7            ; $00A5B8  target Y position
+        sub.w   $0034(a0),d7            ; $00A5BC  dY
+        bpl.s   .label_A5C4            ; $00A5C0  if positive, skip negate
+        neg.w   d7                      ; $00A5C2  D7 = |dY|
+.label_A5C4:
+        add.w   d0,d7                   ; $00A5C4  D7 = Manhattan distance
+        move.w  $0072(a1),d3            ; $00A5C6  target Z position
+        sub.w   $0072(a0),d3            ; $00A5CA  dZ
+        move.w  d3,d6                   ; $00A5CE  D6 = signed dZ
+        bpl.s   .label_A5D4            ; $00A5D0  if positive, skip negate
+        neg.w   d6                      ; $00A5D2  D6 = |dZ|
+.label_A5D4:
+        move.w  $0006(a1),d0            ; $00A5D4  target track position
+        sub.w   $0006(a0),d0            ; $00A5D8  position delta
+        bge.s   .label_A606            ; $00A5DC  if ahead or equal, skip
+        cmpi.w  #$01E0,d7              ; $00A5DE  compare Manhattan dist to 480
+        bgt.s   .label_A606            ; $00A5E2  if > 480, too far
+        cmpi.w  #$0040,d7              ; $00A5E4  compare to 64
+        ble.s   .label_A606            ; $00A5E8  if <= 64, too close for steering
+        cmpi.w  #$0030,d6              ; $00A5EA  compare |dZ| to 48
+        bgt.s   .label_A606            ; $00A5EE  if > 48, skip
+        cmpi.w  #$0064,$0004(a0)        ; $00A5F0  check entity speed class
+        ble.s   .label_A606            ; $00A5F6  if <= 100, skip
+        move.w  #$01E0,d1              ; $00A5F8  D1 = 480
+        sub.w   d7,d1                   ; $00A5FC  D1 = 480 - Manhattan dist
+        asr.w   #6,d1                   ; $00A5FE  D1 /= 64 (proximity scale)
+        asl.w   d1,d0                   ; $00A600  scale position delta by proximity
+        add.w   d0,$0008(a0)            ; $00A602  apply speed adjustment
+.label_A606:
+        cmpi.w  #$0070,d6              ; $00A606  compare |dZ| to 112
+        bge.w   .label_A640            ; $00A60A  if >= 112, skip to heading check
+        tst.w   d0                      ; $00A60E  check position delta
+        ble.s   .label_A618            ; $00A610  if <= 0, behind target
+        cmpi.w  #$00A0,d7              ; $00A612  compare Manhattan dist to 160
+        bgt.s   .label_A640            ; $00A616  if > 160, skip
+.label_A618:
+        neg.w   d0                      ; $00A618  flip sign
+        asr.w   #1,d0                   ; $00A61A  halve value
+        addi.w  #$0A00,d0              ; $00A61C  add bias ($0A00 = 2560)
+        move.w  d7,d1                   ; $00A620  D1 = Manhattan dist
+        asl.w   #4,d1                   ; $00A622  D1 *= 16
+        cmp.w   d1,d0                   ; $00A624  compare biased value to scaled dist
+        bgt.s   .label_A640            ; $00A626  if biased > scaled, skip
+        cmpi.w  #$0040,d6              ; $00A628  compare |dZ| to 64
+        bge.s   .label_A640            ; $00A62C  if >= 64, skip steering
+        moveq   #$40,d0                ; $00A62E  D0 = 64
+        sub.w   d6,d0                   ; $00A630  D0 = 64 - |dZ| (proximity factor)
+        tst.w   d3                      ; $00A632  check signed dZ
+        bpl.s   .label_A638            ; $00A634  if positive, keep sign
+        neg.w   d0                      ; $00A636  flip steering direction
+.label_A638:
+        add.w   d0,d0                   ; $00A638  D0 *= 2
+        add.w   d0,d0                   ; $00A63A  D0 *= 2 (total *4)
+        add.w   d0,$0040(a0)            ; $00A63C  apply steering adjustment
 ; --- heading-based speed avoidance (secondary) ---
-        dc.w    $0C47        ; $00A640  CMPI.W #$0070,D7
-        dc.w    $0070        ; $00A642
-        dc.w    $6C20        ; $00A644  BGE.S +$20
-        dc.w    $3029        ; $00A646  MOVE.W $0040(A1),D0
-        dc.w    $0040        ; $00A648
-        dc.w    $9068        ; $00A64A  SUB.W $0040(A0),D0
-        dc.w    $0040        ; $00A64C
-        dc.w    $3200        ; $00A64E  MOVE.W D0,D1
-        dc.w    $4A43        ; $00A650  TST.W D3
-        dc.w    $6D02        ; $00A652  BLT.S +2
-        dc.w    $4441        ; $00A654  NEG.W D1
-        dc.w    $4A41        ; $00A656  TST.W D1
-        dc.w    $6F0C        ; $00A658  BLE.S +$0C
-        dc.w    $0C41        ; $00A65A  CMPI.W #$1800,D1
-        dc.w    $1800        ; $00A65C
-        dc.w    $6C06        ; $00A65E  BGE.S +6
-        dc.w    $E240        ; $00A660  ASR.W #1,D0
-        dc.w    $D168        ; $00A662  ADD.W D0,$0040(A0)
-        dc.w    $0040        ; $00A664
+.label_A640:
+        cmpi.w  #$0070,d7              ; $00A640  compare Manhattan dist to 112
+        bge.s   physics_integration     ; $00A644  if >= 112, done — fall through
+        move.w  $0040(a1),d0            ; $00A646  target heading
+        sub.w   $0040(a0),d0            ; $00A64A  heading delta
+        move.w  d0,d1                   ; $00A64E  D1 = heading delta
+        tst.w   d3                      ; $00A650  check signed dZ
+        blt.s   .label_A656            ; $00A652  if negative, skip negate
+        neg.w   d1                      ; $00A654  flip direction
+.label_A656:
+        tst.w   d1                      ; $00A656  check adjusted delta
+        ble.s   physics_integration     ; $00A658  if <= 0, done — fall through
+        cmpi.w  #$1800,d1              ; $00A65A  compare to threshold
+        bge.s   physics_integration     ; $00A65E  if >= $1800, done — fall through
+        asr.w   #1,d0                   ; $00A660  halve heading delta
+        add.w   d0,$0040(a0)            ; $00A662  apply heading correction

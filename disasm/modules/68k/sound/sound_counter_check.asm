@@ -16,7 +16,7 @@ sound_counter_check:
         move.b  $0004(a6),d0            ; D0 = status byte
         beq.s   .return                 ; If zero, return
         move.b  $0006(a6),d0            ; D0 = counter
-        dc.w    $6706                   ; BEQ.S $030A86 (external handler)
+        beq.s   fm_envelope_tick_update  ; $030A7E  beq.s → fm_envelope_tick_update
         subq.b  #1,$0006(a6)            ; Decrement counter
 .return:
         rts

@@ -12,22 +12,20 @@
 ; physics_lookup_accessor
 ; Entry: D0 = base index, A0 = context pointer
 ; Uses: D0, D1
-; Returns: Writes indexed value to A0+$6
+; Returns: Writes indexed value to $A(A0)
 ; ============================================================================
 physics_lookup_accessor:
-        move.b  ($FFFFC30F).w,d1        ; $1238 $C30F — Read game state byte
+        move.b  ($FFFFC30F).w,d1        ; $1238 $C30F -- Read game state byte
         add.b   d1,d0                   ; Add to base index
         asl.w   #5,d0                   ; Multiply by 32 (shift left 5)
         move.w  $8A(a0),d1              ; Read multiplier from context
         add.w   d1,d1                   ; Double it (word offset)
         add.w   d1,d0                   ; Add to index
-        dc.w    $317B                   ; MOVE.W opcode (PC-relative indexed)
-        dc.w    $0006                   ; Destination: $6(a0)
-        dc.w    $000A                   ; Source: PC-relative offset to lookup_table_base
+        move.w  lookup_table_base(pc,d0.w),$a(a0) ; $317B $0006 $000A -- table[D0] -> $A(A0)
         rts                             ; $4E75
 
 ; ============================================================================
-; Acceleration/Speed Lookup Tables
+; Acceleration/Speed Lookup Tables (DATA)
 ; $00A218-$00A2D7 (192 bytes = 96 words)
 ; ============================================================================
 lookup_table_base:
@@ -45,9 +43,9 @@ lookup_table_base:
         dc.w    $04CF,$04C7,$04BC,$0498,$0498,$0416,$0416,$0410
 
 ; ============================================================================
-; Sine/Cosine Table (64 entries, fixed-point format)
+; Sine/Cosine Table (DATA, 64 entries, fixed-point format)
 ; $00A2D8-$00A347 (112 bytes = 56 words)
-; Values appear to be 16-bit fixed-point sine wave (0-360° in 64 steps)
+; Values are 16-bit fixed-point sine wave (0-360 in 64 steps)
 ; ============================================================================
 sine_table:
         dc.w    $0200,$0F74,$1EDB,$2E25,$3D43,$4C29,$5AC7,$6910
@@ -59,7 +57,7 @@ sine_table:
         dc.w    $6910,$5AC7,$4C29,$3D43,$2E25,$1EDB,$0F74,$0200
 
 ; ============================================================================
-; Small Lookup Table (4 entries)
+; Small Lookup Table (DATA, 4 entries)
 ; $00A348-$00A34F (8 bytes = 4 words)
 ; ============================================================================
 small_table:

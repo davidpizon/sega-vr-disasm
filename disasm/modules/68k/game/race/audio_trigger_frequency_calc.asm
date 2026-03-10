@@ -49,9 +49,9 @@ audio_trigger_frequency_calc:
         bclr    #1,($FFFFC80B).w                ; clear mode bit
 .check_state:
         cmpi.w  #$0000,($FFFFC8C8).w            ; vint_state = 0?
-        dc.w    $6750                            ; beq.s $0023DC → external handler
+        beq.s   weighted_average_pos_clamp_0023dc ; $002388  beq.s → weighted_average_pos_clamp_0023dc
         cmpi.w  #$0002,($FFFFC8C8).w            ; vint_state = 2?
-        dc.w    $6700,$0092                      ; beq.w $002426 → external handler
+        beq.w   weighted_average_pos_clamp_002426 ; $00238E  beq.w → weighted_average_pos_clamp_002426
 ; --- frequency calculation: weighted shift average ---
         lsr.w   #5,d0                           ; port_data >> 5
         move.w  d0,d1                           ; D1 = port_data >> 5
@@ -63,7 +63,7 @@ audio_trigger_frequency_calc:
         add.w   (a1),d1                         ; add current frequency
         lsr.w   #1,d1                           ; average (smooth)
         cmpi.w  #$1E00,d1                       ; above max?
-        dc.w    $6E12                            ; bgt.s $0023C2 → external (clamp high)
+        bgt.s   randomized_sound_param_0023c2    ; $0023AE  bgt.s → randomized_sound_param_0023c2
         cmpi.w  #$1A5E,d1                       ; below min?
         dc.w    $6E10                            ; bgt.s $0023C6 → external (above min)
         move.w  #$1A5E,d1                       ; clamp to minimum

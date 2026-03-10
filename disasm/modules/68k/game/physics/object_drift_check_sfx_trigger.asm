@@ -27,9 +27,9 @@ object_drift_check_sfx_trigger:
         neg.w   D0                              ; $007D66  D0 = |difference|
 .positive:
         cmpi.w  #$0118,$0004(A0)                ; $007D68  speed_index ≤ $0118?
-        dc.w    $6F00,$009C                     ; $007D6E  ble.w $007E0C → external (slow)
+        ble.w   drift_init_057                  ; $007D6E  ble.w $007E0C → external (slow)
         cmpi.w  #$0800,D0                       ; $007D72  angle diff ≤ $0800?
-        dc.w    $6F00,$0094                     ; $007D76  ble.w $007E0C → external (small angle)
+        ble.w   drift_init_057                  ; $007D76  ble.w $007E0C → external (small angle)
         tst.w   $008C(A0)                       ; $007D7A  velocity_x == 0?
-        dc.w    $6702                           ; $007D7E  beq.s $007D82 → fall through
+        beq.s   race_state_read_sound_trigger   ; $007D7E  beq.s $007D82 → fall through
         rts                                     ; $007D80

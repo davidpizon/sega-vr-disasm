@@ -3,73 +3,51 @@
 ; ROM Range: $012BFA-$012C9E (164 bytes)
 ; ============================================================================
 ; Category: game
-; Purpose: Data prefix (144 bytes) containing sprite descriptors (6 entries
-;   at $012BFA, 24 bytes each) and palette pointer table (6 longword
-;   pointers at $012C72). Executable code at fn_12200_025_exec is
-;   minimal: DMA transfer, display mode $0020, advance game_state.
+; Purpose: Data prefix (144 bytes) containing 6 sprite reference longwords
+;   at $012BFA, followed by 6 sprite descriptors (16 bytes each) at $012C12,
+;   and a palette pointer table (6 longwords) at $012C72.
+;   Executable code at fn_12200_025_exec: MemoryInit, display mode, state advance.
 ;
 ; Uses: D0
 ; RAM:
 ;   $C87E: game_state (word, advanced by 4)
 ; Calls:
-;   $00E52C: dma_transfer
+;   MemoryInit: memory initialization
 ; ============================================================================
 
 camera_dma_xfer:
-; --- data prefix (144 bytes: 6×24-byte sprite descriptors + 6 palette pointers) ---
-        move.l  $5FF6(A3),D1                    ; $012BFA  (data: $222B $5FF6)
-        move.l  $710A(A3),D1                    ; $012BFE  (data: $222B $710A)
-        move.l  -$6EDE(A3),D1                   ; $012C02  (data: $222B $9122)
-        move.l  -$5610(A3),D1                   ; $012C06  (data: $222B $A9F0)
-        move.l  -$370C(A3),D1                   ; $012C0A  (data: $222B $C8F4)
-        move.l  $5FF6(A3),D1                    ; $012C0E  (data: $222B $5FF6)
-; --- sprite descriptor 0: Y=-$50, X=$60, size=$140, padding ---
-        dc.w    $0000                           ; $012C12
-        dc.w    $FFB0                           ; $012C14
-        ori.w   #$0140,-(A0)                    ; $012C16  (data: $0060 $0140)
-        ori.b   #$00,D0                         ; $012C1A  (data: $0000 $0000)
-        ori.b   #$00,D0                         ; $012C1E  (data: $0000 $0000)
-; --- sprite descriptor 1: Y=-$50, X=$60, size=$140, padding ---
-        dc.w    $0000                           ; $012C22
-        dc.w    $FFB0                           ; $012C24
-        ori.w   #$0140,-(A0)                    ; $012C26  (data: $0060 $0140)
-        ori.b   #$00,D0                         ; $012C2A  (data: $0000 $0000)
-        ori.b   #$00,D0                         ; $012C2E  (data: $0000 $0000)
-; --- sprite descriptor 2: Y=-$50, X=$70, size=$140, padding ---
-        dc.w    $0000                           ; $012C32
-        dc.w    $FFB0                           ; $012C34
-        ori.w   #$0140,$00(A0,D0.W)             ; $012C36  (data: $0070 $0140)
-        ori.b   #$00,D0                         ; $012C3C  (data: $0000 $0000)
-        ori.b   #$00,D0                         ; $012C40  (data: $0000 $0000)
-; --- sprite descriptor 3: Y=-$60, X=$80, size=$180, padding ---
-        dc.w    $FFA0                           ; $012C44
-        ori.l   #$01800000,D0                   ; $012C46  (data: $0080 $0180 $0000)
-        ori.b   #$00,D0                         ; $012C4C  (data: $0000 $0000)
-        ori.b   #$00,D0                         ; $012C50  (data: $0000 $0000)
-; --- sprite descriptor 4: Y=-$F0, X=$50, size=$140, padding ---
-        dc.w    $FF10                           ; $012C54
-        ori.w   #$0140,(A0)                     ; $012C56  (data: $0050 $0140)
-        ori.b   #$00,D0                         ; $012C5A  (data: $0000 $0000)
-        ori.b   #$00,D0                         ; $012C5E  (data: $0000 $0000)
-; --- sprite descriptor 5: Y=-$50, X=$60, size=$140, padding ---
-        dc.w    $0000                           ; $012C62
-        dc.w    $FFB0                           ; $012C64
-        ori.w   #$0140,-(A0)                    ; $012C66  (data: $0060 $0140)
-        ori.b   #$00,D0                         ; $012C6A  (data: $0000 $0000)
-        ori.b   #$00,D0                         ; $012C6E  (data: $0000 $0000)
-; --- palette pointer table (6 longword pointers) ---
-        dc.w    $008B                           ; $012C72  ptr[0] high
-        cmpa.l  (A4)+,A5                        ; $012C74  ptr[0] low (raw: $BBDC → $008BBBDC)
-        dc.w    $008B                           ; $012C76  ptr[1] high
-        cmpa.w  (A4)+,A6                        ; $012C78  ptr[1] low (raw: $BCDC → $008BBCDC)
-        dc.w    $008B                           ; $012C7A  ptr[2] high
-        cmpa.l  (A4)+,A5                        ; $012C7C  ptr[2] low (raw: $BBDC → $008BBBDC)
-        dc.w    $008B                           ; $012C7E  ptr[3] high
-        cmpa.l  (A4)+,A6                        ; $012C80  ptr[3] low (raw: $BDDC → $008BBDDC)
-        dc.w    $008B                           ; $012C82  ptr[4] high
-        cmpa.w  (A4)+,A7                        ; $012C84  ptr[4] low (raw: $BEDC → $008BBEDC)
-        dc.w    $008B                           ; $012C86  ptr[5] high
-        cmpa.l  (A4)+,A5                        ; $012C88  ptr[5] low (raw: $BBDC → $008BBBDC)
+; --- 6 sprite reference longwords (DATA) ---
+        dc.w    $222B,$5FF6                     ; $012BFA  sprite ref[0]
+        dc.w    $222B,$710A                     ; $012BFE  sprite ref[1]
+        dc.w    $222B,$9122                     ; $012C02  sprite ref[2]
+        dc.w    $222B,$A9F0                     ; $012C06  sprite ref[3]
+        dc.w    $222B,$C8F4                     ; $012C0A  sprite ref[4]
+        dc.w    $222B,$5FF6                     ; $012C0E  sprite ref[5]
+; --- sprite descriptor 0 (16 bytes, DATA): flag=$0000 Y=$FFB0 X=$0060 W=$0140 ---
+        dc.w    $0000,$FFB0,$0060,$0140         ; $012C12
+        dc.w    $0000,$0000,$0000,$0000         ; $012C1A  padding
+; --- sprite descriptor 1 (16 bytes, DATA): flag=$0000 Y=$FFB0 X=$0060 W=$0140 ---
+        dc.w    $0000,$FFB0,$0060,$0140         ; $012C22
+        dc.w    $0000,$0000,$0000,$0000         ; $012C2A  padding
+; --- sprite descriptor 2 (16 bytes, DATA): flag=$0000 Y=$FFB0 X=$0070 W=$0140 ---
+        dc.w    $0000,$FFB0,$0070,$0140         ; $012C32
+        dc.w    $0000,$0000,$0000,$0000         ; $012C3A  padding
+; --- sprite descriptor 3 (16 bytes, DATA): flag=$0000 Y=$FFA0 X=$0080 W=$0180 ---
+        dc.w    $0000,$FFA0,$0080,$0180         ; $012C42
+        dc.w    $0000,$0000,$0000,$0000         ; $012C4A  padding
+; --- sprite descriptor 4 (16 bytes, DATA): flag=$0000 Y=$FF10 X=$0050 W=$0140 ---
+        dc.w    $0000,$FF10,$0050,$0140         ; $012C52
+        dc.w    $0000,$0000,$0000,$0000         ; $012C5A  padding
+; --- sprite descriptor 5 (16 bytes, DATA): flag=$0000 Y=$FFB0 X=$0060 W=$0140 ---
+        dc.w    $0000,$FFB0,$0060,$0140         ; $012C62
+        dc.w    $0000,$0000,$0000,$0000         ; $012C6A  padding
+; --- palette pointer table (6 longword pointers, DATA) ---
+        dc.l    $008BBBDC                       ; $012C72  palette ptr[0]
+        dc.l    $008BBCDC                       ; $012C76  palette ptr[1]
+        dc.l    $008BBBDC                       ; $012C7A  palette ptr[2]
+        dc.l    $008BBDDC                       ; $012C7E  palette ptr[3]
+        dc.l    $008BBEDC                       ; $012C82  palette ptr[4]
+        dc.l    $008BBBDC                       ; $012C86  palette ptr[5]
 ; --- executable code ---
 fn_12200_025_exec:
         clr.w   D0                              ; $012C8A  mode = 0

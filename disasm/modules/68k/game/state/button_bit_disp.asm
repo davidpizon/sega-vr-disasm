@@ -36,17 +36,17 @@ button_bit_disp:
         moveq   #$08,D0                         ; $006CA0  D0 = $08 (alt value)
 .test_bits:
         btst    #2,D1                           ; $006CA2  bit 2?
-        dc.w    $6600,$0090                     ; $006CA6  bne.w $006D38 → bit 2 handler
+        bne.w   sub_x_position                  ; $006CA6  bit 2 handler
         btst    #3,D1                           ; $006CAA  bit 3?
-        dc.w    $6600,$008E                     ; $006CAE  bne.w $006D3E → bit 3 handler
+        bne.w   add_x_position                  ; $006CAE  bit 3 handler
         btst    #1,D1                           ; $006CB2  bit 1?
-        dc.w    $6600,$008C                     ; $006CB6  bne.w $006D44 → bit 1 handler
+        bne.w   sub_y_position                  ; $006CB6  bit 1 handler
         btst    #0,D1                           ; $006CBA  bit 0?
-        dc.w    $6600,$008A                     ; $006CBE  bne.w $006D4A → bit 0 handler
+        bne.w   add_y_position                  ; $006CBE  bit 0 handler
         btst    #4,D1                           ; $006CC2  bit 4?
-        dc.w    $6600,$0088                     ; $006CC6  bne.w $006D50 → bit 4 handler
+        bne.w   object_pos_table_lookup         ; $006CC6  bit 4 handler
         btst    #5,D1                           ; $006CCA  bit 5?
-        dc.w    $6600,$009E                     ; $006CCE  bne.w $006D6E → bit 5 handler
+        bne.w   position_table_lookup           ; $006CCE  bit 5 handler
         btst    #7,D1                           ; $006CD2  bit 7?
-        dc.w    $6600,$00B4                     ; $006CD6  bne.w $006D8C → bit 7 handler
+        bne.w   steering_calc_reg_safe_wrapper  ; $006CD6  bit 7 handler
         rts                                     ; $006CDA

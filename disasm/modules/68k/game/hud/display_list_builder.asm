@@ -22,10 +22,10 @@
 ; ============================================================================
 
 display_list_builder:
-; --- data table (5 entries × 2 words) ---
+; --- data table (5 entries x 2 words each, DATA) ---
         dc.w    $0402,$C030                     ; $00C05C  entry 0
         dc.w    $0402,$E030                     ; $00C060  entry 1
-        subi.b  #$30,d3                 ; $0403 $0030
+        dc.w    $0403,$0030                     ; $00C064  entry 2
         dc.w    $0403,$2030                     ; $00C068  entry 3
         dc.w    $0403,$4030                     ; $00C06C  entry 4
 ; --- clear 16 display slots ---

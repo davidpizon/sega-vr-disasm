@@ -28,7 +28,7 @@ camera_state_selector:
         lea     ($FFFFC0A2).w,a1                ; camera_frame_counters
         addq.w  #1,$00(a1,d0.w)                 ; increment frame counter
         tst.b   ($FFFFC064).w                   ; camera enabled?
-        dc.w    $6658                            ; bne.s $00B7EE → external handler
+        bne.s   camera_animation_state_disp      ; $00B7CC  bne.s → camera_animation_state_disp
         move.w  ($FFFFC048).w,d0                ; camera_position
         add.w   d0,d0                            ; ×2
         add.w   d0,d0                            ; ×4
@@ -36,7 +36,7 @@ camera_state_selector:
         dc.w    $6656                            ; bne.s $00B7FA → external handler
         move.w  ($FFFFC972).w,d0                ; game_input buttons
         tst.b   ($FFFFC314).w                   ; camera input enabled?
-        dc.w    $6738                            ; beq.s $00B7E6 → skip (input disabled)
+        beq.s   display_state_bit_10_guard       ; $00B7AC  beq.s → display_state_bit_10_guard
 ; --- check directional buttons ---
         btst    #10,d0                          ; button bit 10?
         beq.s   .check_bit9

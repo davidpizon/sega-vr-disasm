@@ -22,7 +22,7 @@
 
 object_geometry_visibility_collect:
         tst.w   ($FFFFC0BA).w                       ; $00734E  segment_table_select
-        dc.w    $6700,$FE52         ; beq.w   $0071A6             ; $007352  zero → return (other module)
+        beq.w   object_visibility_collector       ; $007352  zero → return (other module)
         move.l  A4,-(A7)                        ; $007356  save A4
 ; --- compute camera direction key ---
         move.w  #$0400,D1                       ; $007358  base direction = $0400

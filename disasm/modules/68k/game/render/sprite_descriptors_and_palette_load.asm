@@ -28,37 +28,25 @@ sprite_descriptor_table:
 
 ; --- sh2_palette_load ($00E1BC-$00E1FE, 68 bytes CODE) ---
 sh2_palette_load:
-        dc.w    $3ABC        ; $00E1BC
-        dc.w    $8F02        ; $00E1BE
-        dc.w    $2ABC        ; $00E1C0
-        dc.w    $4000        ; $00E1C2
-        dc.w    $0003        ; $00E1C4
-        dc.w    $4240        ; $00E1C6
-        dc.w    $761B        ; $00E1C8
-        dc.w    $3200        ; $00E1CA
-        dc.w    $E749        ; $00E1CC
-        dc.w    $41F9        ; $00E1CE
-        dc.w    $0088        ; $00E1D0
-        dc.w    $E20C        ; $00E1D2
-        dc.w    $41F0        ; $00E1D4
-        dc.w    $1000        ; $00E1D6
-        dc.w    $383C        ; $00E1D8
-        dc.w    $0005        ; $00E1DA
-        dc.w    $3A3C        ; $00E1DC
-        dc.w    $0007        ; $00E1DE
-        dc.w    $7C00        ; $00E1E0
-        dc.w    $1C30        ; $00E1E2
-        dc.w    $5000        ; $00E1E4
-        dc.w    $0646        ; $00E1E6
-        dc.w    $02F0        ; $00E1E8
-        dc.w    $3C86        ; $00E1EA
-        dc.w    $51CD        ; $00E1EC
-        dc.w    $FFF2        ; $00E1EE
-        dc.w    $51CC        ; $00E1F0
-        dc.w    $FFEA        ; $00E1F2
-        dc.w    $383C        ; $00E1F4
-        dc.w    $004F        ; $00E1F6
-        dc.w    $3CBC        ; $00E1F8
-        dc.w    $0000        ; $00E1FA
-        dc.w    $51CC        ; $00E1FC
-        dc.w    $FFFA        ; $00E1FE
+        move.w  #$8F02,(A5)                     ; $00E1BC  VDP auto-increment = 2
+        move.l  #$40000003,(A5)                 ; $00E1C0  VDP CRAM write cmd (addr $0000)
+        clr.w   D0                              ; $00E1C6  palette group index = 0
+        moveq   #$1B,D3                         ; $00E1C8  D3 = 27 (unused counter?)
+        move.w  D0,D1                           ; $00E1CA  D1 = group index copy
+        lsl.w   #3,D1                           ; $00E1CC  D1 *= 8 (byte offset per row)
+        lea     $0088E20C,A0                    ; $00E1CE  A0 → palette source base
+        lea     (A0,D1.W),A0                    ; $00E1D4  A0 += row offset
+        move.w  #$0005,D4                       ; $00E1D8  outer loop: 6 rows
+.outer_loop:
+        move.w  #$0007,D5                       ; $00E1DC  inner loop: 8 colors per row
+.inner_loop:
+        moveq   #0,D6                           ; $00E1E0  clear high byte
+        move.b  (A0,D5.W),D6                    ; $00E1E2  read palette index byte
+        addi.w  #$02F0,D6                       ; $00E1E6  add CRAM base offset
+        move.w  D6,(A6)                         ; $00E1EA  write to VDP data port
+        dbf     D5,.inner_loop                  ; $00E1EC  loop 8 colors
+        dbf     D4,.outer_loop                  ; $00E1F0  loop 6 rows
+        move.w  #$004F,D4                       ; $00E1F4  fill counter: 80 entries
+.fill_loop:
+        move.w  #$0000,(A6)                     ; $00E1F8  write $0000 (black)
+        dbf     D4,.fill_loop                   ; $00E1FC  loop 80 entries

@@ -24,37 +24,37 @@ vdp_tile_unpack_0024ca:
 ; --- unpack 12 tile regions ---
         lea     $00FF6116,a0                    ; tile source 1
         move.l  #$62020002,(a5)                 ; VRAM write addr
-        dc.w    $4EBA,$FF90                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     ($FFFF9032).w,a0                ; tile source 2
         move.l  #$620C0002,(a5)
-        dc.w    $4EBA,$FF82                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     $00FF611A,a0                    ; tile source 3
         move.l  #$62160002,(a5)
-        dc.w    $4EBA,$FF72                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     $00FF6108,a0                    ; tile source 4
         move.l  #$63020002,(a5)
-        dc.w    $4EBA,$FF62                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     $00FF610A,a0                    ; tile source 5
         move.l  #$630C0002,(a5)
-        dc.w    $4EBA,$FF52                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     $00FF610C,a0                    ; tile source 6
         move.l  #$63160002,(a5)
-        dc.w    $4EBA,$FF42                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     $00FF6104,a0                    ; tile source 7
         move.l  #$632A0002,(a5)
-        dc.w    $4EBA,$FF32                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     $00FF6106,a0                    ; tile source 8
         move.l  #$63340002,(a5)
-        dc.w    $4EBA,$FF22                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         lea     $00FF5FF8,a0                    ; tile source 9
         move.l  #$640C0002,(a5)
-        dc.w    $4EBA,$FF12                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         move.l  #$64160002,(a5)                 ; tile source 9 continued
-        dc.w    $4EBA,$FF08                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         move.l  #$64200002,(a5)
-        dc.w    $4EBA,$FEFE                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         move.l  #$642A0002,(a5)
-        dc.w    $4EBA,$FEF4                      ; jsr unpack_tiles_vdp(pc) → $00247C
+        jsr     pixel_unpack_2pairs(pc)          ; → $00247C
         move.b  #$00,$00FF5FFF                  ; clear tile buffer flag
 .done:
         rts

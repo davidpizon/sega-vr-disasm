@@ -14,140 +14,59 @@
 ; ============================================================================
 
 race_scene_init_vdp_mode:
-        dc.w    $46FC        ; $00C0F0  MOVE.W #$2700,SR (disable interrupts)
-        dc.w    $2700        ; $00C0F2
-        dc.w    $08B8        ; $00C0F4  BCLR #6,($C875).W
-        dc.w    $0006        ; $00C0F6
-        dc.w    $C875        ; $00C0F8
-        dc.w    $3AB8        ; $00C0FA  MOVE.W ($C874).W,D5
-        dc.w    $C874        ; $00C0FC
-        dc.w    $33FC        ; $00C0FE  MOVE.W #$0083,($00A15100).L (MARS adapter ctrl)
-        dc.w    $0083        ; $00C100
-        dc.w    $00A1        ; $00C102
-        dc.w    $5100        ; $00C104
-        dc.w    $0239        ; $00C106  ANDI.B #$FC,($00A15181).L
-        dc.w    $00FC        ; $00C108
-        dc.w    $00A1        ; $00C10A
-        dc.w    $5181        ; $00C10C
-        dc.w    $4EB9        ; $00C10E  JSR $0088270A (hardware setup)
-        dc.w    $0088        ; $00C110
-        dc.w    $270A        ; $00C112
-        dc.w    $11FC        ; $00C114  MOVE.B #$01,($C80D).W
-        dc.w    $0001        ; $00C116
-        dc.w    $C80D        ; $00C118
-        dc.w    $0238        ; $00C11A  ANDI.B #$09,($C80E).W
-        dc.w    $0009        ; $00C11C
-        dc.w    $C80E        ; $00C11E
-        dc.w    $08F8        ; $00C120  BSET #3,($C80E).W
-        dc.w    $0003        ; $00C122
-        dc.w    $C80E        ; $00C124
-        dc.w    $7000        ; $00C126  MOVEQ #0,D0
-        dc.w    $7200        ; $00C128  MOVEQ #0,D1
-        dc.w    $103C        ; $00C12A  MOVE.B #$00,D0
-        dc.w    $0000        ; $00C12C
-        dc.w    $123C        ; $00C12E  MOVE.B #$00,D1
-        dc.w    $0000        ; $00C130
-        dc.w    $4EBA        ; $00C132  JSR $D19C(PC)
-        dc.w    $1068        ; $00C134
-        dc.w    $1038        ; $00C136  MOVE.B ($C8C9).W,D0
-        dc.w    $C8C9        ; $00C138
-        dc.w    $5200        ; $00C13A  ADDQ.B #1,D0
-        dc.w    $13C0        ; $00C13C  MOVE.B D0,($00A15122).L (COMM1)
-        dc.w    $00A1        ; $00C13E
-        dc.w    $5122        ; $00C140
-        dc.w    $31FC        ; $00C142  MOVE.W #$0103,($C8A8).W
-        dc.w    $0103        ; $00C144
-        dc.w    $C8A8        ; $00C146
-        dc.w    $13F8        ; $00C148  MOVE.B ($C8A9).W,($00A15121).L (COMM0_LO)
-        dc.w    $C8A9        ; $00C14A
-        dc.w    $00A1        ; $00C14C
-        dc.w    $5121        ; $00C14E
-        dc.w    $13F8        ; $00C150  MOVE.B ($C8A8).W,($00A15120).L (COMM0_HI)
-        dc.w    $C8A8        ; $00C152
-        dc.w    $00A1        ; $00C154
-        dc.w    $5120        ; $00C156
-        dc.w    $11FC        ; $00C158  MOVE.B #$00,($C80F).W
-        dc.w    $0000        ; $00C15A
-        dc.w    $C80F        ; $00C15C
-        dc.w    $31FC        ; $00C15E  MOVE.W #$0000,($C8BC).W
-        dc.w    $0000        ; $00C160
-        dc.w    $C8BC        ; $00C162
-        dc.w    $4EB9        ; $00C164  JSR $0088D1D4
-        dc.w    $0088        ; $00C166
-        dc.w    $D1D4        ; $00C168
-        dc.w    $4EB9        ; $00C16A  JSR $0088D42C
-        dc.w    $0088        ; $00C16C
-        dc.w    $D42C        ; $00C16E
-        dc.w    $41F9        ; $00C170  LEA $008BA220,A0
-        dc.w    $008B        ; $00C172
-        dc.w    $A220        ; $00C174
-        dc.w    $3038        ; $00C176  MOVE.W ($C8A0).W,D0
-        dc.w    $C8A0        ; $00C178
-        dc.w    $2470        ; $00C17A  MOVEA.L (A0,D0.W),A2
-        dc.w    $0000        ; $00C17C
-        dc.w    $4EB9        ; $00C17E  JSR $0088284C
-        dc.w    $0088        ; $00C180
-        dc.w    $284C        ; $00C182
-        dc.w    $41F9        ; $00C184  LEA $008BAE38,A0
-        dc.w    $008B        ; $00C186
-        dc.w    $AE38        ; $00C188
-        dc.w    $3038        ; $00C18A  MOVE.W ($C8CC).W,D0
-        dc.w    $C8CC        ; $00C18C
-        dc.w    $2470        ; $00C18E  MOVEA.L (A0,D0.W),A2
-        dc.w    $0000        ; $00C190
-        dc.w    $4EB9        ; $00C192  JSR $0088284C+$16=$00882862
-        dc.w    $0088        ; $00C194
-        dc.w    $2862        ; $00C196
-        dc.w    $33FC        ; $00C198  MOVE.W #$0010,($00FF0008).L (display mode)
-        dc.w    $0010        ; $00C19A
-        dc.w    $00FF        ; $00C19C
-        dc.w    $0008        ; $00C19E
-        dc.w    $31FC        ; $00C1A0  MOVE.W #$0000,($C8AA).W
-        dc.w    $0000        ; $00C1A2
-        dc.w    $C8AA        ; $00C1A4
-        dc.w    $4EB9        ; $00C1A6  JSR $008849AA
-        dc.w    $0088        ; $00C1A8
-        dc.w    $49AA        ; $00C1AA
-        dc.w    $4EBA        ; $00C1AC  JSR $CD92(PC)
-        dc.w    $0BE4        ; $00C1AE
-        dc.w    $11FC        ; $00C1B0  MOVE.B #$00,($C314).W
-        dc.w    $0000        ; $00C1B2
-        dc.w    $C314        ; $00C1B4
-        dc.w    $0838        ; $00C1B6  BTST #0,($C818).W
-        dc.w    $0000        ; $00C1B8
-        dc.w    $C818        ; $00C1BA
-        dc.w    $6706        ; $00C1BC  BEQ.S +6
-        dc.w    $11FC        ; $00C1BE  MOVE.B #$01,($C314).W
-        dc.w    $0001        ; $00C1C0
-        dc.w    $C314        ; $00C1C2
-        dc.w    $7000        ; $00C1C4  MOVEQ #0,D0
-        dc.w    $4EBA        ; $00C1C6  JSR $CC72(PC)
-        dc.w    $0AAC        ; $00C1C8
-        dc.w    $4EBA        ; $00C1CA  JSR $C870(PC)
-        dc.w    $06A4        ; $00C1CC
-        dc.w    $4EBA        ; $00C1CE  JSR $C9F0(PC)
-        dc.w    $0820        ; $00C1D0
-        dc.w    $4EBA        ; $00C1D2  JSR $D00C(PC)
-        dc.w    $0E38        ; $00C1D4
-        dc.w    $11FC        ; $00C1D6  MOVE.B #$05,($C310).W
-        dc.w    $0005        ; $00C1D8
-        dc.w    $C310        ; $00C1DA
-        dc.w    $11FC        ; $00C1DC  MOVE.B #$00,($C30F).W
-        dc.w    $0000        ; $00C1DE
-        dc.w    $C30F        ; $00C1E0
-        dc.w    $41F8        ; $00C1E2  LEA ($9000).W,A0
-        dc.w    $9000        ; $00C1E4
-        dc.w    $4EBA        ; $00C1E6  JSR $CC92(PC)
-        dc.w    $0AAA        ; $00C1E8
-        dc.w    $7200        ; $00C1EA  MOVEQ #0,D1
-        dc.w    $4EBA        ; $00C1EC  JSR $CE56(PC)
-        dc.w    $0C68        ; $00C1EE
-        dc.w    $4EBA        ; $00C1F0  JSR $CD4C(PC)
-        dc.w    $0B5A        ; $00C1F2
-        dc.w    $4EB9        ; $00C1F4  JSR $0088A80A (entity_table_load_mode)
-        dc.w    $0088        ; $00C1F6
-        dc.w    $A80A        ; $00C1F8
-        dc.w    $4EB9        ; $00C1FA  JSR $0088A144
-        dc.w    $0088        ; $00C1FC
-        dc.w    $A144        ; $00C1FE
+        move.w  #$2700,sr                       ; $00C0F0  disable interrupts
+        bclr    #6,($FFFFC875).w                ; $00C0F4  clear bit 6 of VDP flag
+        move.w  ($FFFFC874).w,(a5)              ; $00C0FA  load VDP state word into (A5)
+        move.w  #$0083,($00A15100).l            ; $00C0FE  MARS adapter ctrl
+        andi.b  #$FC,($00A15181).l              ; $00C106  clear low 2 bits of MARS status
+        jsr     $0088270A                       ; $00C10E  hardware setup
+        move.b  #$01,($FFFFC80D).w              ; $00C114  set display enable flag
+        andi.b  #$09,($FFFFC80E).w              ; $00C11A  mask display flags to bits 0+3
+        bset    #3,($FFFFC80E).w                ; $00C120  set display flag bit 3
+        moveq   #0,d0                           ; $00C126  D0 = 0
+        moveq   #0,d1                           ; $00C128  D1 = 0
+        move.b  #$00,d0                         ; $00C12A  game mode → D0
+        move.b  #$00,d1                         ; $00C12E  track number → D1
+        jsr     game_mode_track_config(pc)      ; $00C132  configure mode/track indices
+        move.b  ($FFFFC8C9).w,d0                ; $00C136  load track sub-index
+        addq.b  #1,d0                           ; $00C13A  increment
+        move.b  d0,($00A15122).l                ; $00C13C  → COMM1 register
+        move.w  #$0103,($FFFFC8A8).w            ; $00C142  set SH2 command word
+        move.b  ($FFFFC8A9).w,($00A15121).l     ; $00C148  low byte → COMM0_LO
+        move.b  ($FFFFC8A8).w,($00A15120).l     ; $00C150  high byte → COMM0_HI
+        move.b  #$00,($FFFFC80F).w              ; $00C158  clear display sub-flag
+        move.w  #$0000,($FFFFC8BC).w            ; $00C15E  clear race timer
+        jsr     $0088D1D4                       ; $00C164  subsystem init A
+        jsr     $0088D42C                       ; $00C16A  subsystem init B
+        lea     $008BA220,a0                    ; $00C170  ROM pointer table A
+        move.w  ($FFFFC8A0).w,d0                ; $00C176  game mode × 4
+        movea.l $00(a0,d0.w),a2                 ; $00C17A  A2 = table[mode]
+        jsr     $0088284C                       ; $00C17E  data loader A
+        lea     $008BAE38,a0                    ; $00C184  ROM pointer table B
+        move.w  ($FFFFC8CC).w,d0                ; $00C18A  race substate × 4
+        movea.l $00(a0,d0.w),a2                 ; $00C18E  A2 = table[substate]
+        jsr     $00882862                       ; $00C192  data loader B
+        move.w  #$0010,($00FF0008).l            ; $00C198  set display mode
+        move.w  #$0000,($FFFFC8AA).w            ; $00C1A0  clear scene state
+        jsr     $008849AA                       ; $00C1A6  SH2 scene init
+        jsr     scene_init_sh2_buffer_clear_loop(pc) ; $00C1AC  SH2 buffer clear + state init
+        move.b  #$00,($FFFFC314).w              ; $00C1B0  clear collision flag
+        btst    #0,($FFFFC818).w                ; $00C1B6  test race mode bit
+        beq.s   .skip_collision_set             ; $00C1BC  if clear → skip
+        move.b  #$01,($FFFFC314).w              ; $00C1BE  set collision flag
+.skip_collision_set:
+        moveq   #0,d0                           ; $00C1C4
+        jsr     scene_camera_init(pc)            ; $00C1C6  camera segment data copy
+        jsr     track_graphics_and_sound_loader+$AE(pc) ; $00C1CA  track gfx/sound (2nd entry)
+        jsr     vdp_load_table_b(pc)            ; $00C1CE  load VDP register table B
+        jsr     scene_init_vdp_block_setup_counter_reset+$36(pc) ; $00C1D2  counter init (2nd entry)
+        move.b  #$05,($FFFFC310).w              ; $00C1D6  set state phase = 5
+        move.b  #$00,($FFFFC30F).w              ; $00C1DC  clear animation state
+        lea     ($FFFF9000).w,a0                ; $00C1E2  object table base
+        jsr     scene_camera_init+$1E(pc)       ; $00C1E6  camera setup (main entry, A0=objects)
+        moveq   #0,d1                           ; $00C1EA  D1 = 0
+        jsr     object_entries_reset_init_fixed_table(pc) ; $00C1EC  reset 16 object entries
+        jsr     object_table_init_entry_array(pc) ; $00C1F0  init 15-entry object table
+        jsr     $0088A80A                       ; $00C1F4  entity_table_load_mode
+        jsr     $0088A144                       ; $00C1FA  entity init
 ; --- falls through to scene_init_orch at $C200 ---

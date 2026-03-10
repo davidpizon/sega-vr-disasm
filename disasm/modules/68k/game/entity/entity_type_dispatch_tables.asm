@@ -80,23 +80,17 @@ entity_type_dispatch_tables:
         dc.w    $0080        ; $00A8D0  128
         dc.w    $0080        ; $00A8D2  128
 ; --- handler pointer table (3 longwords) ---
-        dc.w    $0088        ; $00A8D4  → $0088A972
-        dc.w    $A972        ; $00A8D6
-        dc.w    $0088        ; $00A8D8  → $0088AB88
-        dc.w    $AB88        ; $00A8DA
-        dc.w    $0088        ; $00A8DC  → $0088ABCE
-        dc.w    $ABCE        ; $00A8DE
+entity_type_handler_ptr_table:
+        dc.l    $0088A972   ; $00A8D4  → ai_entity_main_update_orch
+        dc.l    $0088AB88   ; $00A8D8  → ai_entity_main_update_orch+$216
+        dc.l    $0088ABCE   ; $00A8DC  → ai_entity_main_update_orch+$25C
 ; --- entity type dispatcher (code) ---
 entity_type_dispatch:
-        dc.w    $3028        ; $00A8E0  MOVE.W $00AE(A0),D0
-        dc.w    $00AE        ; $00A8E2
-        dc.w    $D040        ; $00A8E4  ADD.W D0,D0
-        dc.w    $43F8        ; $00A8E6  LEA ($C05C).W,A1
-        dc.w    $C05C        ; $00A8E8
-        dc.w    $3031        ; $00A8EA  MOVE.W (A1,D0.W),D0
-        dc.w    $0000        ; $00A8EC
-        dc.w    $D040        ; $00A8EE  ADD.W D0,D0
-        dc.w    $D040        ; $00A8F0  ADD.W D0,D0
-        dc.w    $227B        ; $00A8F2  MOVEA.L (-36,PC,D0.W),A1
-        dc.w    $00DC        ; $00A8F4
-        dc.w    $4ED1        ; $00A8F6  JMP (A1)
+        move.w  $00AE(A0),D0                    ; $00A8E0  entity type index
+        add.w   D0,D0                           ; $00A8E4  x2 (word index)
+        lea     ($FFFFC05C).w,A1                ; $00A8E6  A1 → RAM type table
+        move.w  (A1,D0.W),D0                    ; $00A8EA  secondary index
+        add.w   D0,D0                           ; $00A8EE  x2
+        add.w   D0,D0                           ; $00A8F0  x4 (longword index)
+        movea.l entity_type_handler_ptr_table-4(pc,D0.W),A1 ; $00A8F2  handler address
+        jmp     (A1)                            ; $00A8F6  dispatch

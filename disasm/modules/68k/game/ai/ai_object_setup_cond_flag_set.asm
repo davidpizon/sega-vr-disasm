@@ -21,7 +21,7 @@ ai_object_setup_cond_flag_set:
         move.b  #$0B,$0000(a1)                  ; $00BDE2: $137C $000B $0000 — command $0B
         move.b  #$0C,$0010(a1)                  ; $00BDE8: $137C $000C $0010 — command $0C
         cmpi.w  #$000C,d1                       ; $00BDEE: $0C41 $000C — >= 12?
-        dc.w    $6D0A                           ; BLT.S fn_a200_039_end ; $00BDF2: — < 12 → fall through
+        blt.s   display_param_calc               ; $00BDF2  BLT.S → display_param_calc
         move.w  #$FFFF,$00FF60C8                ; $00BDF4: $33FC $FFFF $00FF $60C8 — set SH2 flag
 .done:
         rts                                     ; $00BDFC: $4E75
