@@ -15,12 +15,15 @@
 ; Confidence: high
 ; ============================================================================
 
+; --- Variant A: Full pipeline (46 calls) ---
+; Complete physics + AI + rendering chain for the player entity.
 entity_render_pipeline:
         jsr     camera_state_selector+12(pc); $4EBA $5CC4
         MOVEQ   #$00,D0                         ; $005ABA
-        MOVE.W  D0,$0044(A0)                    ; $005ABC
-        MOVE.W  D0,$0046(A0)                    ; $005AC0
-        MOVE.W  D0,$004A(A0)                    ; $005AC4
+        MOVE.W  D0,$0044(A0)                    ; $005ABC ; clear display_offset
+        MOVE.W  D0,$0046(A0)                    ; $005AC0 ; clear display_scale
+        MOVE.W  D0,$004A(A0)                    ; $005AC4 ; clear display_aux
+; --- Physics pipeline ---
         jsr     tire_squeal_check(pc)   ; $4EBA $2AFA
         jsr     speed_degrade_calc(pc)  ; $4EBA $2ACC
         jsr     effect_timer_mgmt(pc)   ; $4EBA $487E
@@ -35,6 +38,7 @@ entity_render_pipeline:
         jsr     drift_physics_and_camera_offset_calc(pc); $4EBA $3B92
         jsr     suspension_steering_damping(pc); $4EBA $3D08
         jsr     object_anim_timer_speed_clear+6(pc); $4EBA $237C
+; --- Position + AI ---
         jsr     entity_pos_update(pc)   ; $4EBA $1496
         jsr     multi_flag_test(pc)     ; $4EBA $21D2
         jsr     ai_opponent_select(pc)  ; $4EBA $492A
@@ -53,6 +57,7 @@ entity_render_pipeline:
         jsr     ai_target_check(pc)     ; $4EBA $5196
         DC.W    $4EBA,$2696         ; JSR     $0081D8(PC); $005B40
         jsr     race_start_countdown_sequence(pc); $4EBA $437A
+; --- Rendering output ---
         jsr     obj_distance_calc(pc)   ; $4EBA $1AB4
         jsr     object_visibility_collector(pc); $4EBA $1658
         jsr     camera_param_calc(pc)   ; $4EBA $CE32
@@ -60,8 +65,11 @@ entity_render_pipeline:
         jsr     object_table_sprite_param_update(pc); $4EBA $DB84
         jsr     object_proximity_check_jump_table_dispatch(pc); $4EBA $DC58
         jsr     render_slot_setup+88(pc); $4EBA $E424
-        MOVE.B  (-15612).W,(-15604).W           ; $005B64
-        jmp     control_flag_check_cond_pos_copy(pc); $4EFA $109C
+        MOVE.B  (-15612).W,(-15604).W           ; $005B64 ; copy display flags
+        jmp     control_flag_check_cond_pos_copy(pc); $4EFA $109C ; tail call
+
+; --- Variant B: Reduced pipeline (non-player) ---
+; No steering, drift, or position update.
         jsr     camera_state_selector+12(pc); $4EBA $5C0C
         jsr     effect_timer_mgmt(pc)   ; $4EBA $47DC
         jsr     object_timer_expire_speed_param_reset(pc); $4EBA $25F8
@@ -80,6 +88,7 @@ entity_render_pipeline:
         jsr     proximity_zone_multi+54(pc); $4EBA $2B52
         jsr     heading_from_position(pc); $4EBA $3490
         jsr     ai_target_check(pc)     ; $4EBA $5120
+; --- Rendering ---
         jsr     obj_distance_calc(pc)   ; $4EBA $1A46
         jsr     object_visibility_collector(pc); $4EBA $15EA
         jsr     camera_param_calc(pc)   ; $4EBA $CDC4
@@ -88,15 +97,18 @@ entity_render_pipeline:
         jsr     object_proximity_check_jump_table_dispatch(pc); $4EBA $DBEA
         jsr     render_slot_setup+88(pc); $4EBA $E3B6
         jsr     sprite_hud_layout_builder+154(pc); $4EBA $E0F0
-        MOVE.B  (-15612).W,(-15604).W           ; $005BD6
-        jmp     object_bitmask_table_button_flag_handler+32(pc); $4EFA $100C
-        MOVE.W  #$0000,$0006(A0)                ; $005BE0
-        MOVE.W  #$0000,$0074(A0)                ; $005BE6
+        MOVE.B  (-15612).W,(-15604).W           ; $005BD6 ; copy display flags
+        jmp     object_bitmask_table_button_flag_handler+32(pc); $4EFA $100C ; tail call
+
+; --- Variant C: Countdown timer variant ---
+; Sets speed=0, render_state=0; runs physics with countdown.
+        MOVE.W  #$0000,$0006(A0)                ; $005BE0 ; speed = 0
+        MOVE.W  #$0000,$0074(A0)                ; $005BE6 ; render_state = 0
         jsr     camera_state_selector+12(pc); $4EBA $5B8E
         MOVEQ   #$00,D0                         ; $005BF0
-        MOVE.W  D0,$0044(A0)                    ; $005BF2
-        MOVE.W  D0,$0046(A0)                    ; $005BF6
-        MOVE.W  D0,$004A(A0)                    ; $005BFA
+        MOVE.W  D0,$0044(A0)                    ; $005BF2 ; clear display_offset
+        MOVE.W  D0,$0046(A0)                    ; $005BF6 ; clear display_scale
+        MOVE.W  D0,$004A(A0)                    ; $005BFA ; clear display_aux
         jsr     input_mask_both(pc)     ; $4EBA $EDEE
         jsr     speed_degrade_calc(pc)  ; $4EBA $2996
         jsr     effect_timer_mgmt(pc)   ; $4EBA $4748
@@ -104,8 +116,8 @@ entity_render_pipeline:
         jsr     field_check_guard(pc)   ; $4EBA $24BC
         jsr     timer_decrement_multi(pc); $4EBA $2934
         jsr     steering_input_processing_and_velocity_update+6(pc); $4EBA $38E2
-        CMPI.W  #$0004,(-15764).W               ; $005C1A
-        BEQ.S  .loc_0170                        ; $005C20
+        CMPI.W  #$0004,(-15764).W               ; $005C1A ; check game phase
+        BEQ.S  .loc_0170                        ; $005C20 ; skip if phase 4
         jsr     entity_force_integration_and_speed_calc+18(pc); $4EBA $36EE
 .loc_0170:
         jsr     entity_speed_clamp(pc)  ; $4EBA $3EEA
@@ -114,18 +126,23 @@ entity_render_pipeline:
         jsr     position_velocity_update(pc); $4EBA $1450
         jsr     angle_to_sine(pc)       ; $4EBA $1472
         jsr     collision_response_surface_tracking+278(pc); $4EBA $1BDA
-        SUBQ.W  #1,(-16340).W                   ; $005C3E
-        BGT.S  .loc_01A0                        ; $005C42
-        MOVE.W  #$0000,(-16340).W               ; $005C44
-        MOVE.W  #$0000,$0074(A0)                ; $005C4A
-        MOVE.W  (-16244).W,(-16262).W           ; $005C50
+; --- Countdown timer ---
+        SUBQ.W  #1,(-16340).W                   ; $005C3E ; decrement timer
+        BGT.S  .loc_01A0                        ; $005C42 ; still counting?
+        MOVE.W  #$0000,(-16340).W               ; $005C44 ; timer expired
+        MOVE.W  #$0000,$0074(A0)                ; $005C4A ; reset render_state
+        MOVE.W  (-16244).W,(-16262).W           ; $005C50 ; restore render mode
 .loc_01A0:
+; --- Jump into Variant A's rendering tail ---
         jmp     entity_render_pipeline+90(pc); $4EFA $FEB8
+
+; --- Variant D: Minimal display pipeline ---
+; No steering/drift; for spectator or replay entities.
         jsr     camera_state_selector+12(pc); $4EBA $5B20
         MOVEQ   #$00,D0                         ; $005C5E
-        MOVE.W  D0,$0044(A0)                    ; $005C60
-        MOVE.W  D0,$0046(A0)                    ; $005C64
-        MOVE.W  D0,$004A(A0)                    ; $005C68
+        MOVE.W  D0,$0044(A0)                    ; $005C60 ; clear display_offset
+        MOVE.W  D0,$0046(A0)                    ; $005C64 ; clear display_scale
+        MOVE.W  D0,$004A(A0)                    ; $005C68 ; clear display_aux
         jsr     speed_degrade_calc(pc)  ; $4EBA $292C
         jsr     effect_timer_mgmt(pc)   ; $4EBA $46DE
         jsr     object_timer_expire_speed_param_reset(pc); $4EBA $24FA
@@ -151,19 +168,21 @@ entity_render_pipeline:
         jsr     race_start_countdown_sequence(pc); $4EBA $41FA
         jsr     tilt_adjust(pc)         ; $4EBA $3954
         jsr     obj_state_return(pc)    ; $4EBA $4C2A
-        BTST    #4,(-15602).W                   ; $005CD0
+; --- Check if render mode needs restoring ---
+        BTST    #4,(-15602).W                   ; $005CD0 ; test mode flag bit 4
         BEQ.S  .loc_0228                        ; $005CD6
-        MOVE.W  (-16244).W,(-16262).W           ; $005CD8
+        MOVE.W  (-16244).W,(-16262).W           ; $005CD8 ; restore render mode
 .loc_0228:
+; --- Rendering output ---
         jsr     obj_distance_calc(pc)   ; $4EBA $191E
         jsr     object_visibility_collector(pc); $4EBA $14C2
         jsr     camera_param_calc(pc)   ; $4EBA $CC9C
         jsr     object_state_disp_0031a6(pc); $4EBA $D4BA
         jsr     object_table_sprite_param_update(pc); $4EBA $D9EE
         jsr     object_proximity_check_jump_table_dispatch(pc); $4EBA $DAC2
-        TST.W  (-14180).W                       ; $005CF6
-        BNE.S  .loc_024A                        ; $005CFA
+        TST.W  (-14180).W                       ; $005CF6 ; split screen active?
+        BNE.S  .loc_024A                        ; $005CFA ; skip HUD if split
         jsr     sprite_hud_layout_builder+154(pc); $4EBA $DFC6
 .loc_024A:
-        MOVE.B  (-15612).W,(-15604).W           ; $005D00
+        MOVE.B  (-15612).W,(-15604).W           ; $005D00 ; copy display flags
         RTS                                     ; $005D06

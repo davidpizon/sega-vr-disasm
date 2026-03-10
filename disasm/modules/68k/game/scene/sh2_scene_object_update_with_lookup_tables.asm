@@ -14,14 +14,16 @@
 ; Confidence: high
 ; ============================================================================
 
+; --- DATA: sine lookup table (32 entries, 16-bit) ---
+; Values are 16-bit signed sine values for animation interpolation
 sh2_scene_object_update_with_lookup_tables:
-        ORI.B  #$00,D0                          ; $00ECBE
-        ORI.B  #$00,D0                          ; $00ECC2
-        ORI.B  #$00,D0                          ; $00ECC6
-        ORI.B  #$00,D0                          ; $00ECCA
-        ORI.B  #$00,D0                          ; $00ECCE
-        ORI.B  #$00,D0                          ; $00ECD2
-        ORI.B  #$00,D0                          ; $00ECD6
+        ORI.B  #$00,D0                          ; $00ECBE ; $0000,$0000 (data)
+        ORI.B  #$00,D0                          ; $00ECC2 ; $0000,$0000
+        ORI.B  #$00,D0                          ; $00ECC6 ; $0000,$0000
+        ORI.B  #$00,D0                          ; $00ECCA ; $0000,$0000
+        ORI.B  #$00,D0                          ; $00ECCE ; $0000,$0000
+        ORI.B  #$00,D0                          ; $00ECD2 ; $0000,$0000
+        ORI.B  #$00,D0                          ; $00ECD6 ; $0000,$0000
         DC.W    $0000                           ; $00ECDA
         or.b    d0,d0                   ; $8000
         OR.B   -(A1),D2                         ; $00ECDE
@@ -122,77 +124,88 @@ sh2_scene_object_update_with_lookup_tables:
         ORI.B  #$00,D0                          ; $00EDCE
         ORI.B  #$00,D0                          ; $00EDD2
         ORI.B  #$00,D0                          ; $00EDD6
-        MOVEA.L #$0603D100,A0                   ; $00EDDA
-        MOVEA.L #$04004C68,A1                   ; $00EDE0
-        MOVE.W  #$0070,D0                       ; $00EDE6
-        MOVE.W  #$0010,D1                       ; $00EDEA
-        DC.W    $4EBA,$F56A         ; JSR     $00E35A(PC); $00EDEE
+; --- CODE: send tile data to SH2, run game objects ---
+        MOVEA.L #$0603D100,A0                   ; $00EDDA ; SH2 SDRAM src
+        MOVEA.L #$04004C68,A1                   ; $00EDE0 ; frame buffer dst
+        MOVE.W  #$0070,D0                       ; $00EDE6 ; width = 112
+        MOVE.W  #$0010,D1                       ; $00EDEA ; height = 16
+        DC.W    $4EBA,$F56A         ; JSR     $00E35A(PC); $00EDEE ; sh2_send_cmd
 .loc_0134:
-        TST.B  COMM0_HI                        ; $00EDF2
+        TST.B  COMM0_HI                        ; $00EDF2 ; SH2 busy?
         BNE.S  .loc_0134                        ; $00EDF8
-        bsr.w   table_dual_dispatch     ; $6100 $0136
-        MOVEA.L #$0603D800,A0                   ; $00EDFE
-        MOVEA.L #$0401985C,A1                   ; $00EE04
-        MOVE.W  #$0088,D0                       ; $00EE0A
-        MOVE.W  #$0010,D1                       ; $00EE0E
-        DC.W    $4EBA,$F546         ; JSR     $00E35A(PC); $00EE12
+        bsr.w   table_dual_dispatch     ; $6100 $0136 ; dual table handler
+; send geometry data block
+        MOVEA.L #$0603D800,A0                   ; $00EDFE ; geometry src
+        MOVEA.L #$0401985C,A1                   ; $00EE04 ; dest in VRAM
+        MOVE.W  #$0088,D0                       ; $00EE0A ; width = 136
+        MOVE.W  #$0010,D1                       ; $00EE0E ; height = 16
+        DC.W    $4EBA,$F546         ; JSR     $00E35A(PC); $00EE12 ; sh2_send_cmd
+; per-frame object/sprite update
         CLR.W  D0                               ; $00EE16
-        MOVE.B  (-24550).W,D0                   ; $00EE18
+        MOVE.B  (-24550).W,D0                   ; $00EE18 ; screen config index
         bsr.w   MemoryInit              ; $6100 $F70E
         jsr     object_update(pc)       ; $4EBA $C862
         jsr     animated_seq_player+10(pc); $4EBA $C8B4
-        CMPI.W  #$0001,(-24544).W               ; $00EE28
+; --- State machine: browsing / fade transitions ---
+        CMPI.W  #$0001,(-24544).W               ; $00EE28 ; fade state 1?
         BEQ.W  .loc_01FC                        ; $00EE2E
-        CMPI.W  #$0002,(-24544).W               ; $00EE32
+        CMPI.W  #$0002,(-24544).W               ; $00EE32 ; fade state 2?
         BEQ.W  .loc_020C                        ; $00EE38
-        MOVE.W  (-14228).W,D1                   ; $00EE3C
-        ANDI.B  #$E0,D1                         ; $00EE40
-        BNE.S  .loc_019E                        ; $00EE44
-        MOVE.W  (-14228).W,D1                   ; $00EE46
-        ANDI.B  #$10,D1                         ; $00EE4A
-        BNE.S  .loc_019A                        ; $00EE4E
-        SUBQ.W  #4,(-14210).W                   ; $00EE50
-        BRA.W  .loc_0224                        ; $00EE54
+; --- Input detection ---
+        MOVE.W  (-14228).W,D1                   ; $00EE3C ; P1 buttons
+        ANDI.B  #$E0,D1                         ; $00EE40 ; A/B/C mask
+        BNE.S  .loc_019E                        ; $00EE44 ; action → exit
+        MOVE.W  (-14228).W,D1                   ; $00EE46 ; re-read buttons
+        ANDI.B  #$10,D1                         ; $00EE4A ; Start mask
+        BNE.S  .loc_019A                        ; $00EE4E ; Start → set exit flag
+        SUBQ.W  #4,(-14210).W                   ; $00EE50 ; tick timer
+        BRA.W  .loc_0224                        ; $00EE54 ; → frame end
 .loc_019A:
-        ST      (-24552).W                      ; $00EE58
+        ST      (-24552).W                      ; $00EE58 ; set exit flag ($FF)
+; --- Begin exit: save palette + trigger fade ---
 .loc_019E:
-        MOVE.B  #$A8,(-14172).W                 ; $00EE5C
-        TST.B  (-24550).W                       ; $00EE62
-        BNE.S  .loc_01B4                        ; $00EE66
-        MOVE.B  (-24551).W,(-24546).W           ; $00EE68
+        MOVE.B  #$A8,(-14172).W                 ; $00EE5C ; SFX: confirm
+        TST.B  (-24550).W                       ; $00EE62 ; screen config
+        BNE.S  .loc_01B4                        ; $00EE66 ; config 1 path
+        MOVE.B  (-24551).W,(-24546).W           ; $00EE68 ; save palette P1
         BRA.W  .loc_01BA                        ; $00EE6E
 .loc_01B4:
-        MOVE.B  (-24551).W,(-24547).W           ; $00EE72
+        MOVE.B  (-24551).W,(-24547).W           ; $00EE72 ; save palette P2
 .loc_01BA:
-        TST.B  (-24545).W                       ; $00EE78
-        BNE.S  .loc_01CE                        ; $00EE7C
-        MOVE.B  (-24546).W,(-335).W             ; $00EE7E
-        MOVE.B  (-24547).W,(-343).W             ; $00EE84
+; write palette to appropriate screen slot
+        TST.B  (-24545).W                       ; $00EE78 ; split-screen?
+        BNE.S  .loc_01CE                        ; $00EE7C ; yes → alt slots
+        MOVE.B  (-24546).W,(-335).W             ; $00EE7E ; pal → slot A
+        MOVE.B  (-24547).W,(-343).W             ; $00EE84 ; pal → slot B
         BRA.S  .loc_01DA                        ; $00EE8A
 .loc_01CE:
-        MOVE.B  (-24546).W,(-334).W             ; $00EE8C
-        MOVE.B  (-24547).W,(-342).W             ; $00EE92
+        MOVE.B  (-24546).W,(-334).W             ; $00EE8C ; pal → alt slot A
+        MOVE.B  (-24547).W,(-342).W             ; $00EE92 ; pal → alt slot B
+; --- Trigger fade-out ---
 .loc_01DA:
-        MOVE.B  #$01,(-14327).W                 ; $00EE98
-        MOVE.B  #$01,(-14326).W                 ; $00EE9E
-        BSET    #7,(-14322).W                   ; $00EEA4
-        MOVE.B  #$01,(-14334).W                 ; $00EEAA
-        MOVE.W  #$0002,(-24544).W               ; $00EEB0
+        MOVE.B  #$01,(-14327).W                 ; $00EE98 ; fade flag 1
+        MOVE.B  #$01,(-14326).W                 ; $00EE9E ; fade flag 2
+        BSET    #7,(-14322).W                   ; $00EEA4 ; trigger fade-out
+        MOVE.B  #$01,(-14334).W                 ; $00EEAA ; transition active
+        MOVE.W  #$0002,(-24544).W               ; $00EEB0 ; state → phase 2
         BRA.W  .loc_0220                        ; $00EEB6
+; --- Wait for fade phase 1 ---
 .loc_01FC:
-        BTST    #6,(-14322).W                   ; $00EEBA
-        BNE.S  .loc_0220                        ; $00EEC0
-        CLR.W  (-24544).W                       ; $00EEC2
+        BTST    #6,(-14322).W                   ; $00EEBA ; phase 1 done?
+        BNE.S  .loc_0220                        ; $00EEC0 ; still fading
+        CLR.W  (-24544).W                       ; $00EEC2 ; reset state
         BRA.W  .loc_0220                        ; $00EEC6
+; --- Wait for fade phase 2 ---
 .loc_020C:
-        BTST    #7,(-14322).W                   ; $00EECA
-        BNE.S  .loc_0220                        ; $00EED0
-        CLR.W  (-24544).W                       ; $00EED2
-        ADDQ.W  #4,(-14210).W                   ; $00EED6
+        BTST    #7,(-14322).W                   ; $00EECA ; phase 2 done?
+        BNE.S  .loc_0220                        ; $00EED0 ; still fading
+        CLR.W  (-24544).W                       ; $00EED2 ; reset state
+        ADDQ.W  #4,(-14210).W                   ; $00EED6 ; advance scene
         BRA.W  .loc_0224                        ; $00EEDA
 .loc_0220:
-        SUBQ.W  #4,(-14210).W                   ; $00EEDE
+        SUBQ.W  #4,(-14210).W                   ; $00EEDE ; tick timer
+; --- Frame end ---
 .loc_0224:
-        MOVE.W  #$0018,$00FF0008                ; $00EEE2
-        MOVE.B  #$01,(-14303).W                 ; $00EEEA
+        MOVE.W  #$0018,$00FF0008                ; $00EEE2 ; V-INT period = 24
+        MOVE.B  #$01,(-14303).W                 ; $00EEEA ; frame ready flag
         RTS                                     ; $00EEF0
