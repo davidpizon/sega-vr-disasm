@@ -2192,7 +2192,7 @@ $(SH2_VIS_BITMASK_BIN): $(SH2_VIS_BITMASK_SRC) | dirs
 	@echo "==> Assembling SH2: vis_bitmask_handler..."
 	$(SH2_AS) $(SH2_ASFLAGS) -o $(BUILD_DIR)/sh2/vis_bitmask_handler.o $<
 	$(SH2_OBJCOPY) -O binary $(BUILD_DIR)/sh2/vis_bitmask_handler.o $@
-	@echo "    Output: $@ ($$(wc -c < $@) bytes, expected 36)"
+	@echo "    Output: $@ ($$(wc -c < $@) bytes, expected 64)"
 
 $(SH2_VIS_BITMASK_INC): $(SH2_VIS_BITMASK_BIN)
 	@mkdir -p $(SH2_GEN_DIR)
