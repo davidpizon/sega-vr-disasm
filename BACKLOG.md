@@ -19,40 +19,31 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 
 ## P1 — FPS Improvement
 
-### B-015: cmd_27 Queue Decoupling via Master SH2 (Track A)
+### S-1d: Profile and Verify LOD Culling Impact (Phase 1 Critical Path)
 **Status:** OPEN
-**Priority:** P1 — highest-leverage single optimization
-**Why:** sh2_cmd_27 COMM7 waits account for **21.7% of useful 68K work** (~33,000 cycles/game frame). Even after B-003's async conversion, the 68K blocks on each of the 21 entries because COMM2-6 is shared. Using the idle Master SH2 (0% utilization) as a fast DMA proxy decouples the 68K from the Slave's processing time.
+**Priority:** P1 — **must verify before S-4 state merge**
+**Why:** S-1a (LOD distance culling) and S-1b (visibility bitmask communication) are committed. S-1c (SH2 descriptor patching) has code complete. The SH2 rendering loop (`func_070`) already checks entity descriptor flags and skips invisible entities. We need profiling data to confirm actual Slave SH2 cycle reduction.
 **Approach:**
-1. SDRAM ring buffer (32 entries × 12B = 384B at $0203F000)
-2. 68K writes params to COMM2-6, triggers Master SH2 (COMM0 or CMDINT)
-3. Master SH2 copies entry to SDRAM queue (~20-30 SH2 cycles)
-4. 68K waits only for Master copy (~10-30 68K cycles vs ~1,580 currently)
-5. Slave drains queue from SDRAM independently
-6. Frame-end sync: 68K polls queue pointers before buffer flip
-**Expected savings:** ~33,000 cycles/game frame (21.7% useful work reduction)
-**Key files:** `code_e200.asm` (sh2_cmd_27), `code_20200.asm` (Master dispatch), `expansion_300000.asm` (new handler), `inline_slave_drain.asm`
-**Depends on:** Nothing (can start immediately)
-**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Track A
+1. Commit S-1c Phase 2 handler (vis_bitmask_handler at $3011A0)
+2. Build and run profiler: `VRD_PROFILE_PC=1 VRD_PROFILE_PC_LOG=profile.csv ./profiling_frontend ../../build/vr_rebuild.32x 2400 --autoplay`
+3. Compare Slave SH2 cycles against baseline (78.3% / 299,958 cycles)
+4. If SH2 reduction is ≥15%, proceed to S-4
+**Expected savings:** ~15-40% Slave SH2 reduction (depending on how many entities are culled during racing)
+**Key files:** `disasm/sh2/expansion/vis_bitmask_handler.asm`, `disasm/modules/68k/game/render/object_table_sprite_param_update.asm`
+**Depends on:** Nothing
+**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
 
-### B-016: Batched Work Offload to Master SH2 (Track B)
-**Status:** OPEN
-**Priority:** P1 — required to reach 30 FPS alongside B-015
-**Why:** ~12% of useful 68K work is pure math (angle normalization, trig, physics) that can run on the idle Master SH2. Synchronous offload is proven anti-productive (angle_normalize added 23% overhead). Batched offload amortizes the COMM handshake cost.
+### S-4: Merge $C87E States 0+4 (Phase 1 — 30 FPS)
+**Status:** OPEN (blocked on S-1d verification)
+**Priority:** P1 — enables 2-TV-frame operation = 30 FPS
+**Why:** Even if SH2 finishes rendering in 2 TV frames, the game takes 3 because states 0 and 4 each consume a full TV frame doing minimal work (~5,000-10,000 cycles combined). Merging them into one state saves 1 TV frame.
 **Approach:**
-1. Accumulate inputs in 68K Work RAM during frame
-2. At batch sync point: send N inputs via COMM registers (amortized handshake)
-3. Master SH2 computes all results
-4. 68K reads results from COMM registers or SDRAM scratchpad
-**Candidates (in implementation order):**
-- `angle_normalize` (4.5% useful, 8 calls/frame, pure math) — first target
-- `sine_cosine_quadrant_lookup` (2.0%, ROM table lookup)
-- `physics_integration` (3.8%, needs entity field marshaling to SDRAM)
-- `rotational_offset_calc` (2.0%, needs marshaling)
-**Expected savings:** ~18,000 cycles/game frame (12% useful work reduction)
-**Key files:** Various 68K game modules, `expansion_300000.asm` (SH2 compute handlers)
-**Depends on:** Nothing (can start after B-015 or in parallel)
-**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Track B
+1. In each race dispatcher, combine state 0 and state 4 handler code
+2. Advance $C87E by 8 instead of 4 (skip directly to state 8)
+3. State 4 entry in jump table → dead code (point to state 8 as fallback)
+**Key files:** `state_disp_004cb8.asm`, `state_disp_005020.asm`, `state_disp_005308.asm`, `state_disp_005618.asm`, `state_disp_005586.asm`
+**Depends on:** S-1d (must confirm SH2 renders in ≤2 TV frames)
+**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
 
 ---
 
@@ -93,7 +84,7 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 - Jump table entry $25 at $020814 redirected from $06005024 → $02300500.
 - PicoDrive 3600-frame autoplay verified (menus + race mode). COMM2_HI=$0000 throughout.
 **Key files:** `disasm/sections/code_e200.asm`, `disasm/sh2/expansion/cmd25_single_shot.asm`, `disasm/sections/expansion_300000.asm`, `disasm/sections/code_20200.asm`
-**Next optimization:** Real gains require B-015 (cmd_27 queue decoupling) and B-016 (batched work offload). See [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Tracks A+B.
+**Next optimization:** Real gains require S-1d (verify LOD culling impact) and S-4 (state merge for 30 FPS). See [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1.
 
 ### B-006: ~~Activate v4.0 parallel hooks~~
 **Status:** REVERTED and SHELVED (2026-02-11, reassessed 2026-03-10)
@@ -101,7 +92,7 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **Result (2026-02-10):** 3 patches applied. ROM boots, menus work. **Crashes with stuck engine sound when entering race mode.**
 **Root cause (2026-02-11):** Three independent bugs in Patch #2 (master_dispatch_hook): COMM7 namespace collision (game cmd 0x27 triggers uninitialized queue drain), literal pool collision at $020480, R0 clobber. Reverting Patch #2 alone was insufficient — Patches #1 and #3 together also caused crashes (shadow_path_wrapper COMM7 barrier deadlock or parallel vertex_transform data races).
 **Fix:** Full revert of all 3 patches. Expansion ROM code exists but is dead.
-**Reassessment (2026-03-10):** Dual-SH2 rendering via this approach is shelved. The fundamental design has namespace collision and data race issues that require a completely new approach. B-015 and B-016 are the priority path to 30 FPS — they use the Master SH2 for queuing and computation rather than parallel rendering.
+**Reassessment (2026-03-10):** Dual-SH2 rendering via this approach is shelved. The fundamental design has namespace collision and data race issues. See [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1 (S-1 LOD culling + S-4 state merge) for the priority path to 30 FPS. Phase 2 item S-8 (Master as vertex transform coprocessor) revisits dual-SH2 with a safer design.
 **Key files:** `disasm/sections/code_20200.asm`, `disasm/sections/code_22200.asm`, `disasm/sections/expansion_300000.asm`
 
 ---

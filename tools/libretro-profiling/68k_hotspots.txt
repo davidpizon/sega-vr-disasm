@@ -1,7 +1,7 @@
 # 68K Hotspots - Top 20 PCs by cycle share
 # Format: PC [Region] (share%) function_name
 
- 1. 0x00FF0010 [WRAM    ] (52.30%) WRAM_code
+ 1. 0x00FF0010 [WRAM    ] (52.28%) WRAM_code
  2. 0x0088E360 [ROM-68K ] (10.52%) Sprite Descriptor Table + SH2 Palette...
  3. 0x0089461C [ROM-68K ] ( 1.07%) Menu Tile Copy to VDP (Block Transfer)
  4. 0x0089461A [ROM-68K ] ( 0.95%) Menu Tile Copy to VDP (Block Transfer)
