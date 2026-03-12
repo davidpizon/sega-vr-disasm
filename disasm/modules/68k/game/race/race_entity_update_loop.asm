@@ -1,8 +1,8 @@
 ; ============================================================================
 ; race_entity_update_loop — Race Entity Update Loop
 ; ROM Range: $00593C-$005AB6 (378 bytes)
-; Per-frame update for race entities. Selects from two 8-entry jump tables
-; (normal vs special mode, selected by bit 3 of race options). Executes
+; Per-frame update for race entities. Selects from two 10-entry jump tables
+; (normal vs special mode, selected by bit 3 of $C88E). Executes
 ; movement calculation, speed, collision avoidance, heading update, and
 ; lateral/longitudinal force computation using sine lookup tables.
 ;
@@ -46,54 +46,43 @@ race_entity_update_loop:
         MOVE.W  (-16262).W,D0                   ; $005984
         BTST    #3,(-14322).W                   ; $005988
         BNE.S  .use_special_table                        ; $00598E
-        MOVEA.L $00599C(PC,D0.W),A1             ; $005990
+        MOVEA.L .normal_table(PC,D0.W),A1       ; $005990
         JMP     (A1)                            ; $005994
 .use_special_table:
-        MOVEA.L $0059C4(PC,D0.W),A1             ; $005996
+        MOVEA.L .special_table(PC,D0.W),A1      ; $005996
         JMP     (A1)                            ; $00599A
-        DC.W    $0088                           ; $00599C
-        ADDQ.L  #5,-$78(A6,D0.W)                ; $00599E
-        SUBQ.W  #5,$0088(A6)                    ; $0059A2
-        SMI     -(A0)                           ; $0059A6
-.jt_entry_4:
-        DC.W    $0088                           ; $0059A8
-        ADDQ.W  #6,(A2)+                        ; $0059AA
-        DC.W    $0088                           ; $0059AC
-        DC.W    $5D08                           ; $0059AE
-        DC.W    $0088                           ; $0059B0
-        SLT     -(A0)                           ; $0059B2
-        DC.W    $0088                           ; $0059B4
-        ADDQ.B  #7,($0088).W                    ; $0059B6
-        BLS.S  .check_race_state                        ; $0059BA
-        DC.W    $0088                           ; $0059BC
-        BLS.S  .post_speed_calc                        ; $0059BE
-        DC.W    $0088                           ; $0059C0
-        SMI     $0088(A4)                       ; $0059C2
-        SGT     $0088(A2)                       ; $0059C6
-        SUBQ.L  #7,(A2)+                        ; $0059CA
-        DC.W    $0088                           ; $0059CC
-        BRA.S  .jt_entry_5                        ; $0059CE
-        DC.W    $0088                           ; $0059D0
-        BRA.S  .jt_entry_4                        ; $0059D2
-        DC.W    $0088                           ; $0059D4
-        BSR.S  .angle_negative                        ; $0059D6
-.jt_entry_5:
-        DC.W    $0088                           ; $0059D8
-        SLT     -(A0)                           ; $0059DA
-        DC.W    $0088                           ; $0059DC
-        BHI.S  $005972                          ; $0059DE
-        DC.W    $0088                           ; $0059E0
-        BLS.S  .check_ai_flags                        ; $0059E2
-        DC.W    $0088                           ; $0059E4
-        BLS.S  $005A22                          ; $0059E6
-        DC.W    $0088                           ; $0059E8
-        BRA.S  $005A00                          ; $0059EA
+; --- Normal render pipeline jump table (10 entries at $00599C) ---
+; Selected when bit 3 of $C88E is clear. Index D0 from $C08A (0/4/8/.../36).
+.normal_table:
+        dc.l    $00885AB6               ; [0] entity_render_pipeline (A: full)
+        dc.l    $00885B6E               ; [1] entity_render_pipeline (B: reduced)
+        dc.l    $00885BE0               ; [2] entity_render_pipeline (C: countdown)
+        dc.l    $00885C5A               ; [3] entity_render_pipeline (D: minimal)
+        dc.l    $00885D08               ; [4] player_entity_frame_update
+        dc.l    $00885DE0               ; [5] entity_data_table_render_pipeline_variant+24
+        dc.l    $00885E38               ; [6] game_frame_orch
+        dc.l    $00886394               ; [7] 2p_copy (D: MOVEM block copy)
+        dc.l    $0088633A               ; [8] 2p_copy (C: stripped)
+        dc.l    $00885BEC               ; [9] entity_render_pipeline (C: skip init)
+; --- Special render pipeline jump table (10 entries at $0059C4) ---
+; Selected when bit 3 of $C88E is set. Same index scheme.
+.special_table:
+        dc.l    $00885EEA               ; [0] vdp_dma variant (A: full)
+        dc.l    $00885F9A               ; [1] vdp_dma variant (B: reduced)
+        dc.l    $00886008               ; [2] vdp_dma variant (C: countdown)
+        dc.l    $008860D4               ; [3] vdp_dma variant (D: display-only)
+        dc.l    $0088617A               ; [4] entity_render_frame_orch
+        dc.l    $00885DE0               ; [5] entity_data_table_render_pipeline_variant+24
+        dc.l    $00886292               ; [6] 2p_copy (B: full + VDP DMA)
+        dc.l    $00886394               ; [7] 2p_copy (D: MOVEM block copy)
+        dc.l    $0088633A               ; [8] 2p_copy (C: stripped)
+        dc.l    $00886014               ; [9] vdp_dma variant (C: skip init)
         MOVE.W  D7,-(A7)                        ; $0059EC
         jsr     entity_speed_clamp(pc)  ; $4EBA $4122
         jsr     speed_calculation(pc)   ; $4EBA $49C6
         jsr     speed_interpolation(pc) ; $4EBA $49F2
 .post_speed_calc:
-        DC.W    $4EBA,$4A74         ; JSR     $00A470(PC); $0059FA
+        jsr     collision_avoidance_speed_calc(pc); $4EBA $4A74
         MOVE.W  $0054(A0),D0                    ; $0059FE
         ANDI.W  #$0009,D0                       ; $005A02
         BEQ.S  .skip_collision_flag                        ; $005A06

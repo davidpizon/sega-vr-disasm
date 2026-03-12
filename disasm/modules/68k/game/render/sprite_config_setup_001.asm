@@ -2,10 +2,16 @@
 ; Sprite Config Setup 001
 ; ROM Range: $004200-$004280 (128 bytes)
 ; ============================================================================
-; Category: input
-; Purpose: Configures sprite display entries from racer data
-;   Looks up sprite graphics pointers from ROM tables
-;   Copies position data from work buffers via BSR to next function
+; Configures sprite display entries from racer data. Looks up sprite
+; graphics pointers from ROM tables ($008997C4, $00899780) and copies
+; position data from work buffers via BSR to data_unpack_nibbles.
+;
+; NOTE: The label at $004200 exists for structural completeness, but this
+; address is NEVER jumped to directly. The AND.B instruction at $004200
+; is actually the low address word ($CA20) of a cross-boundary JSR in
+; display_state_race_lap_preamble (code_2200). After that JSR returns,
+; execution enters at $004202 (MOVEQ #$07,D7), skipping the AND.B.
+; See display_state_race_lap_preamble.asm for full explanation.
 ;
 ; Uses: D0, D1, D5, D7, A0, A1, A2, A3
 ; RAM:
@@ -14,11 +20,10 @@
 ;   $C25C: position_stride
 ;   $C260: position_buf_a
 ;   $C07C: input_state
-; Confidence: medium
 ; ============================================================================
 
 sprite_config_setup_001:
-        and.b   -(A0),D5                        ; $004200  (entry from previous fn)
+        and.b   -(A0),D5                        ; $004200  DEAD CODE — JSR address field (see header)
         moveq   #$07,D7                         ; $004202  D7 = 7 (sprite count)
         moveq   #$00,D0                         ; $004204  D0 = 0
         move.b  ($FFFFC30C).w,D0                ; $004206  D0 = racer_sprite_id

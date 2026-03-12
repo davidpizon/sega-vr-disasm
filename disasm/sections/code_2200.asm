@@ -114,18 +114,4 @@ object_table_sprite_param_update:
         include "modules/68k/game/physics/object_speed_ramp_up_state_advance.asm"
         include "modules/68k/game/state/check_timeout_60.asm"
         include "modules/68k/game/race/race_completion_check_lap_bit_tracking.asm"
-; --- Cross-boundary code ($0041E4-$0041FF, continues into code_4200) ---
-        dc.w    $11FC        ; $0041E4
-        dc.w    $0001        ; $0041E6
-        dc.w    $C800        ; $0041E8
-        dc.w    $11FC        ; $0041EA
-        dc.w    $00F3        ; $0041EC
-        dc.w    $C822        ; $0041EE
-        dc.w    $0838        ; $0041F0
-        dc.w    $0005        ; $0041F2
-        dc.w    $C30E        ; $0041F4
-        dc.w    $6604        ; $0041F6
-        dc.w    $4EBA        ; $0041F8
-        dc.w    $6FBE        ; $0041FA
-        dc.w    $4EB9        ; $0041FC
-        dc.w    $0088        ; $0041FE
+        include "modules/68k/game/render/display_state_race_lap_preamble.asm"

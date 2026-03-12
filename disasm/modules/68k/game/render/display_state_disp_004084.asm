@@ -19,34 +19,25 @@
 display_state_disp_004084:
         MOVE.W  #$0001,(-16312).W               ; $004084
         MOVE.W  (-16260).W,D0                   ; $00408A
-        MOVEA.L $004094(PC,D0.W),A1             ; $00408E
+        MOVEA.L .jump_table(PC,D0.W),A1          ; $00408E
         JMP     (A1)                            ; $004092
-        DC.W    $0088                           ; $004094
-        DC.W    $40C8                           ; $004096
-        DC.W    $0088                           ; $004098
-        DC.W    $412E                           ; $00409A
-        DC.W    $0088                           ; $00409C
-        DC.W    $413A                           ; $00409E
-        DC.W    $0088                           ; $0040A0
-        DC.W    $4168                           ; $0040A2
-        DC.W    $0088                           ; $0040A4
-        DC.W    $417C                           ; $0040A6
-        DC.W    $0088                           ; $0040A8
-        DC.W    $41E4                           ; $0040AA
-        DC.W    $0088                           ; $0040AC
-        DC.W    $42BA                           ; $0040AE
-        DC.W    $0088                           ; $0040B0
-        DC.W    $4300                           ; $0040B2
-        DC.W    $0088                           ; $0040B4
-        DC.W    $432E                           ; $0040B6
-        DC.W    $0088                           ; $0040B8
-        DC.W    $434A                           ; $0040BA
-        DC.W    $0088                           ; $0040BC
-        DC.W    $4390                           ; $0040BE
-        DC.W    $0088                           ; $0040C0
-        DC.W    $43BC                           ; $0040C2
-        DC.W    $0088                           ; $0040C4
-        LEA     (A0),A1                         ; $0040C6
+; --- Display state jump table (13 entries at $004094) ---
+; Indexed by $C07C (0/4/8/.../48). Each entry is a 68K absolute address.
+.jump_table:
+        dc.l    $008840C8               ; [ 0] .state_0: display init (local)
+        dc.l    $0088412E               ; [ 1] .state_1: sound cmd $96 (local)
+        dc.l    $0088413A               ; [ 2] object speed ramp-up + state advance
+        dc.l    $00884168               ; [ 3] check timeout (60 frames)
+        dc.l    $0088417C               ; [ 4] race completion check + lap bit tracking
+        dc.l    $008841E4               ; [ 5] display_state_race_lap_preamble
+        dc.l    $008842BA               ; [ 6] timer threshold init (sprite setup)
+        dc.l    $00884300               ; [ 7] scroll update animation
+        dc.l    $0088432E               ; [ 8] timer wait and clear sprite
+        dc.l    $0088434A               ; [ 9] fade subtract array (palette fade-out)
+        dc.l    $00884390               ; [10] timer wait and set transition flags
+        dc.l    $008843BC               ; [11] sound queue and advance (SH2 gate)
+        dc.l    $008843D0               ; [12] game_init_state_dispatch_002
+.state_0:
         MOVE.B  #$01,(-14336).W                 ; $0040C8
         CMPI.W  #$FFFF,(-16304).W               ; $0040CE
         BNE.S  .init_display                        ; $0040D4
@@ -65,6 +56,7 @@ display_state_disp_004084:
         MOVE.W  #$0040,(-15780).W               ; $004120
         ADDQ.W  #4,(-16260).W                   ; $004126
         jmp     ai_digit_lookup_best_lap(pc); $4EFA $708C
+.state_1:
         MOVE.B  #$96,(-14171).W                 ; $00412E
         ADDQ.W  #4,(-16260).W                   ; $004134
         RTS                                     ; $004138
