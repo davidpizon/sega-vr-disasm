@@ -49,7 +49,8 @@
 ;   --- Track 1 Phase 3: General command async ---
 ;   0x301000-0x3010EF  general_queue_drain (240 bytes, COMM protocol replay)
 ;   0x3010F0-0x30119F  cmd22_single_shot (176 bytes, longword copy + inline COMM cleanup)
-;   0x3011A0-0x3FFFFF  Free space (remaining ~1019KB)
+;   0x3011A0-0x3011C3  vis_bitmask_handler (36 bytes, Stage 1 entity visibility)
+;   0x3011C4-0x3FFFFF  Free space (remaining ~1019KB)
 ;
 ; Shared Data Structures (cache-through SDRAM, NOT in expansion ROM):
 ;   0x2203E000-0x2203E00F  Parameter block (16 bytes: R14, R7, R8, R5)
@@ -349,7 +350,24 @@ cmd22_single_shot:
         include "sh2/generated/cmd22_single_shot.inc"
 
 ; ============================================================================
-; REMAINING EXPANSION ROM SPACE (from ~0x3011A0)
+; VISIBILITY BITMASK HANDLER: 0x3011A0 (SH2 address: 0x023011A0)
+; ============================================================================
+; Stage 1 entity visibility communication: receives 15-bit visibility bitmask
+; from 68K via COMM3 and stores to SDRAM work area at $2203E020.
+; Entity rendering loops on the Slave SH2 read this bitmask to skip
+; invisible entities, reducing SSH2 rendering workload.
+;
+; COMM layout: COMM0=$0107 (trigger+index), COMM3=bitmask (15 bits).
+; Jump table entry $07 at $06000780+$1C=$0600079C → $023011A0.
+;
+; See: disasm/sh2/expansion/vis_bitmask_handler.asm for source
+;
+        dcb.b   ($3011A0 - *), $FF      ; Pad to 0x3011A0
+vis_bitmask_handler:
+        include "sh2/generated/vis_bitmask_handler.inc"
+
+; ============================================================================
+; REMAINING EXPANSION ROM SPACE (from ~0x3011C4)
 ; ============================================================================
 ; Pad to $3F0000 (960KB) instead of $400000 (1MB) to avoid PicoDrive
 ; emulator bug triggered by ROM files > ~0x3F1F40 bytes.
