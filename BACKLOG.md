@@ -20,29 +20,19 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 ## P1 — FPS Improvement
 
 ### S-1d: Profile and Verify LOD Culling Impact (Phase 1 Critical Path)
-**Status:** OPEN
-**Priority:** P1 — **must verify before S-4 state merge**
-**Why:** S-1a (LOD distance culling) and S-1b (visibility bitmask communication) are committed. S-1c (SH2 descriptor patching) has code complete. The SH2 rendering loop (`func_070`) already checks entity descriptor flags and skips invisible entities. We need profiling data to confirm actual Slave SH2 cycle reduction.
-**Approach:**
-1. Commit S-1c Phase 2 handler (vis_bitmask_handler at $3011A0)
-2. Build and run profiler: `VRD_PROFILE_PC=1 VRD_PROFILE_PC_LOG=profile.csv ./profiling_frontend ../../build/vr_rebuild.32x 2400 --autoplay`
-3. Compare Slave SH2 cycles against baseline (78.3% / 299,958 cycles)
-4. If SH2 reduction is ≥15%, proceed to S-4
-**Expected savings:** ~15-40% Slave SH2 reduction (depending on how many entities are culled during racing)
+**Status:** DONE (2026-03-12) — **ZERO IMPACT, S-1 is a dead end**
+**Priority:** P1
+**Result:** Four independent profiling tests (baseline, forced-cull, cache fix, entity-loop-skip) all produced identical cycle counts across all three CPUs. Entity descriptors at `$0600C344` are unused during racing. The entity loop at `$06002C8C` never executes during autoplay race mode. Racing uses the Huffman renderer (`$06004AD0`, Master cmd `$23`) with a different data structure at `$0600C800` (stride `$10`, byte flags, 32 entries).
+**Architectural corrections:** Master SH2 (not Slave) does the 3D rendering. Slave handles palette, scene commands, and cmd_27 pixel ops.
 **Key files:** `disasm/sh2/expansion/vis_bitmask_handler.asm`, `disasm/modules/68k/game/render/object_table_sprite_param_update.asm`
-**Depends on:** Nothing
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
 
 ### S-4: Merge $C87E States 0+4 (Phase 1 — 30 FPS)
-**Status:** OPEN (blocked on S-1d verification)
+**Status:** DONE (2026-03-12) — 30 FPS achieved, partial speed compensation applied
 **Priority:** P1 — enables 2-TV-frame operation = 30 FPS
-**Why:** Even if SH2 finishes rendering in 2 TV frames, the game takes 3 because states 0 and 4 each consume a full TV frame doing minimal work (~5,000-10,000 cycles combined). Merging them into one state saves 1 TV frame.
-**Approach:**
-1. In each race dispatcher, combine state 0 and state 4 handler code
-2. Advance $C87E by 8 instead of 4 (skip directly to state 8)
-3. State 4 entry in jump table → dead code (point to state 8 as fallback)
-**Key files:** `state_disp_004cb8.asm`, `state_disp_005020.asm`, `state_disp_005308.asm`, `state_disp_005618.asm`, `state_disp_005586.asm`
-**Depends on:** S-1d (must confirm SH2 renders in ≤2 TV frames)
+**Why:** The game takes 3 TV frames per game frame because states 0 and 4 each consume a full TV frame doing minimal work (~5,000-10,000 cycles combined). Merging them into one state saves 1 TV frame.
+**Implementation:** `ADDQ.W #8,($FFFFC87E).w` in 5 race dispatchers skips state 4. Speed compensation (S-4b) adjusts deceleration constants ($2000→$1555, $1800→$1000), smoothing multiplier ($0284→$01AD), and timer sub-tick resets ($C4→$A6). Target speed scaling (movement ×2/3) is pending — both code_6200 and code_A200 are packed to exact section boundaries with hardcoded absolute address tables that break when code shifts.
+**Key files:** `state_disp_004cb8.asm`, `state_disp_005020.asm`, `state_disp_005308.asm`, `state_disp_005618.asm`, `state_disp_005586.asm`, `race_entity_update_loop.asm`, `speed_interpolation.asm`, `cascaded_frame_counter.asm`, `ai_timer_inc.asm`
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
 
 ---
@@ -84,7 +74,7 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 - Jump table entry $25 at $020814 redirected from $06005024 → $02300500.
 - PicoDrive 3600-frame autoplay verified (menus + race mode). COMM2_HI=$0000 throughout.
 **Key files:** `disasm/sections/code_e200.asm`, `disasm/sh2/expansion/cmd25_single_shot.asm`, `disasm/sections/expansion_300000.asm`, `disasm/sections/code_20200.asm`
-**Next optimization:** Real gains require S-1d (verify LOD culling impact) and S-4 (state merge for 30 FPS). See [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1.
+**Next optimization:** S-4 (state merge + speed compensation) is DONE — 30 FPS achieved. See [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 2 for next steps.
 
 ### B-006: ~~Activate v4.0 parallel hooks~~
 **Status:** REVERTED and SHELVED (2026-02-11, reassessed 2026-03-10)

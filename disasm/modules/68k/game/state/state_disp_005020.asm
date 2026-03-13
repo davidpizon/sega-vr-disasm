@@ -8,7 +8,8 @@
 ;   state_dispatch_idx ($C87E). State 0 handler: calls VDPSyncSH2,
 ;   init ($002154), animation_update, frame_sync, display_update,
 ;   frame_update ($00B03C), sprite_setup ($00B632), sprite_finalize
-;   ($00B646). Advances state by 4, writes $14 to SH2 COMM.
+;   ($00B646). Advances state by 8 (S-4: skip state 4 → 30 FPS),
+;   writes $14 to SH2 COMM.
 ;
 ; Uses: D0, D2, A0, A1, A6
 ; RAM:
@@ -47,7 +48,7 @@ state_disp_005020:
         jsr     speed_scale_conditional(pc); $4EBA $5FE4
         jsr     lap_value_store_1(pc)   ; $4EBA $65D6
         jsr     lap_value_store_2(pc)   ; $4EBA $65E6
-        addq.w  #4,($FFFFC87E).w                ; $005062  advance state
+        addq.w  #8,($FFFFC87E).w                ; $005062  S-4: skip state 4, advance 0→8
         move.w  #$0014,$00FF0008                ; $005066  SH2 COMM = $14
         rts                                     ; $00506E
 

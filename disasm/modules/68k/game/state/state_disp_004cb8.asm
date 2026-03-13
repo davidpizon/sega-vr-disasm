@@ -7,8 +7,8 @@
 ;   Dispatches via 5-entry longword jump table indexed by
 ;   state_dispatch_idx ($C87E). State 0 handler: calls VDPSyncSH2,
 ;   init ($0020D6), animation_update, frame_update ($00B02C),
-;   sprite_setup ($00B632), sprite_input_check, advances state by 4,
-;   writes $10 to SH2 COMM.
+;   sprite_setup ($00B632), sprite_input_check, advances state by 8
+;   (S-4: skip state 4 → 30 FPS), writes $10 to SH2 COMM.
 ;
 ; Uses: D0, D3, D7, A1, A2
 ; RAM:
@@ -43,6 +43,6 @@ state_disp_004cb8:
         jsr     speed_scale_simple(pc)  ; $4EBA $6344
         jsr     lap_value_store_1(pc)   ; $4EBA $6946
         jsr     sh2_handler_dispatch_scene_init+98(pc); $4EBA $0BD8
-        addq.w  #4,($FFFFC87E).w               ; $004CF2  advance state
+        addq.w  #8,($FFFFC87E).w               ; $004CF2  S-4: skip state 4, advance 0→8
         move.w  #$0010,$00FF0008               ; $004CF6  SH2 COMM = $10
         rts                                     ; $004CFE

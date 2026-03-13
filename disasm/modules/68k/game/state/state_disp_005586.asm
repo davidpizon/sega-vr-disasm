@@ -5,8 +5,8 @@
 ; Category: game
 ; Purpose: Dispatches via 4-entry longword jump table indexed by
 ;   state_dispatch_idx ($C87E). State 0 handler: calls VDPSyncSH2,
-;   sfx_queue_process, sprite_input_check, then advances state by 4
-;   and writes $10 to SH2 COMM register ($FF0008).
+;   sfx_queue_process, sprite_input_check, then advances state by 8
+;   (S-4: skip state 4 → 30 FPS), writes $10 to SH2 COMM register ($FF0008).
 ;
 ; Uses: D0, A0, A1
 ; RAM:
@@ -30,6 +30,6 @@ state_disp_005586:
         jsr     mars_dma_xfer_vdp_fill(pc); $4EBA $D320
         jsr     sound_update_disp+244(pc); $4EBA $CC24
         jsr     sh2_handler_dispatch_scene_init+98(pc); $4EBA $031E
-        addq.w  #4,($FFFFC87E).w               ; $0055AC  advance state
+        addq.w  #8,($FFFFC87E).w               ; $0055AC  S-4: skip state 4, advance 0→8
         move.w  #$0010,$00FF0008               ; $0055B0  SH2 COMM = $10
         rts                                     ; $0055B8

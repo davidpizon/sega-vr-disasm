@@ -288,6 +288,8 @@ See [68K_FUNCTION_REFERENCE.md](68K_FUNCTION_REFERENCE.md) for complete function
 
 ### 3D Engine (Master SH2)
 
+*Note: Primary dispatch at $020460 is Master SH2 (verified March 2026). Slave has separate dispatch at $020592 via COMM2.*
+
 | Address | Name | Description |
 |---------|------|-------------|
 | $0222301C | `display_list_processor` | Parse display list |

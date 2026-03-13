@@ -6,8 +6,8 @@
 ; Purpose: Dispatches via 5-entry longword jump table indexed by
 ;   state_dispatch_idx ($C87E). State 0 handler: calls VDPSyncSH2,
 ;   init ($0020D6), animation_update, frame_update ($00B02C),
-;   sprite_setup ($00B632), then advances state by 4 and writes
-;   $10 to SH2 COMM.
+;   sprite_setup ($00B632), then advances state by 8
+;   (S-4: skip state 4 → 30 FPS) and writes $10 to SH2 COMM.
 ;
 ; Uses: D0, A0, A1, A6
 ; RAM:
@@ -36,6 +36,6 @@ state_disp_005308:
         jsr     cascaded_frame_counter+10(pc); $4EBA $5D6E
         jsr     speed_scale_simple(pc)  ; $4EBA $5CF8
         jsr     lap_value_store_1(pc)   ; $4EBA $62FA
-        addq.w  #4,($FFFFC87E).w               ; $00533A  advance state
+        addq.w  #8,($FFFFC87E).w               ; $00533A  S-4: skip state 4, advance 0→8
         move.w  #$0010,$00FF0008               ; $00533E  SH2 COMM = $10
         rts                                     ; $005346

@@ -106,9 +106,9 @@ Current:     Slave SH2 uses ~2.35 TV frames → needs 3 TV frames → ~20 FPS
 
 The critical path: verify LOD culling reduces SH2 work → tune thresholds → merge state machine states.
 
-### S-1: Entity Visibility Culling — IN PROGRESS
+### S-1: Entity Visibility Culling — DEAD END
 
-The end-to-end pipeline is nearly complete. The 68K culls far entities, communicates visibility to the SH2 via a bitmask, and the SH2 handler patches entity descriptor flags that the rendering loop already checks.
+**Status: Investigated and abandoned (March 2026).** Four independent profiling tests confirmed zero impact on any CPU. The entity descriptors at `$0600C344` are unused during racing.
 
 **Status breakdown:**
 
@@ -116,44 +116,71 @@ The end-to-end pipeline is nearly complete. The 68K culls far entities, communic
 |-----------|--------|------|
 | S-1a: 68K LOD distance culling | **DONE** (80c54fc) | Entities >1536 units from player get D5/D6=0 |
 | S-1b: Visibility bitmask comms | **DONE** (c5952c1) | 68K builds 15-bit bitmask, sends via COMM3 cmd $07 |
-| S-1c: SH2 descriptor patching | **CODE COMPLETE** | Handler at $3011A0 patches 15 flags at $2200C344 (stride $14) |
-| S-1d: Profile and verify impact | **NOT STARTED** | Run profiler, measure actual Slave SH2 cycle reduction |
-| S-1e: Threshold tuning | **NOT STARTED** | Test $0400–$0800 thresholds for pop-in vs. polygon tradeoff |
+| S-1c: SH2 descriptor patching | **CODE COMPLETE** | Handler at $3011A0 patches 15 flags at $0600C344 (stride $14) |
+| S-1d: Profile and verify impact | **DONE — ZERO IMPACT** | 4 tests: baseline, forced-cull, cache fix, entity-loop-skip — all identical cycles |
+| S-1e: Threshold tuning | **CANCELLED** | No point tuning what has no effect |
 
-**How it works:** The SH2 rendering loop (`func_070` / `loop_dispatcher_short` at $024060) already checks entity descriptor flags with `MOV.W @(0,R14),R0 / CMP/EQ #0,R0 / BT .skip`. Setting flag=0 genuinely skips all transform + rasterization work for that entity. The vis_bitmask_handler writes these flags based on the 68K's LOD decisions.
+**Why it failed:** The entity loop at `$06002C8C` (which checks descriptor flags at `$0600C344` with `MOV.W @(0,R14),R0 / CMP/EQ #0,R0 / BT .skip`) does **NOT execute during racing**. The entire call chain from Master cmd `$02` → scene orchestrator → entity loop callers is never triggered during autoplay race mode.
 
-**Impact estimate:** If LOD culls ~5-8 of 15 entities on average during racing, and entity polygons are ~60% of total Slave work: 33-53% entity reduction × 60% = **~20-32% total Slave SH2 reduction**. This brings 2.35 TV frames down to ~1.6-1.9 — under the 2.0 threshold needed for 30 FPS.
+Racing uses the **Huffman renderer** at `$06004AD0` (Master cmd `$23`) and a completely different data structure at `$0600C800` (stride `$10`, byte flags, 32 entries) — not the entity descriptors at `$0600C344` (stride `$14`, word flags, 15 entries).
 
-**Files:**
-- `disasm/modules/68k/game/render/object_table_sprite_param_update.asm` — 68K LOD culling
-- `disasm/modules/68k/game/scene/sh2_object_and_sprite_update_orch.asm` — bitmask builder + sender
-- `disasm/sh2/expansion/vis_bitmask_handler.asm` — SH2 descriptor patcher
-- `disasm/sh2/3d_engine/loop_dispatcher_short.asm` — SH2 flag check (existing game code)
+**Profiling evidence (4 tests, 2400-frame autoplay):**
 
-**Risk:** Medium. The actual entity-vs-track polygon ratio is not precisely measured. S-1d profiling is essential before proceeding to S-4.
+| Test | Slave SH2 | Master SH2 | 68K |
+|------|-----------|------------|-----|
+| Baseline | 296,356 | 185,508 | 127,987 |
+| Forced-cull (bitmask=$0000) | 296,355 | 185,511 | 127,987 |
+| Cache fix + forced-cull | 296,355 | 185,511 | 127,987 |
+| Entity loop force-skip | 296,355 | 185,511 | 127,987 |
 
-**Next step:** Commit the Phase 2 handler, run profiler, measure.
+**Architectural corrections discovered:**
+- The PRIMARY dispatch loop at `$020460` is the **Master** SH2 (was incorrectly labeled Slave in earlier analysis)
+- The Slave has a separate dispatch loop at `$020592` via hardware COMM2 (`$20004024`)
+- The Slave is **NOT used for polygon rendering** — it handles palette, scene commands, and cmd_27 pixel ops
+- 3D polygon rendering runs on the Master SH2
 
-### S-4: Merge $C87E States 0+4 — READY (blocked on S-1d)
+**Committed code:** S-1a (LOD culling) and S-1b (bitmask communication) remain in the codebase. The vis_bitmask_handler at `$3011A0` is functional but patches unused data. These may become useful if the entity descriptors are used in other game modes (non-racing scenes).
 
-If S-1 reduces SH2 rendering to ≤2 TV frames, the game still takes 3 TV frames because states 0 and 4 each consume a full TV frame doing minimal work (VDP sync, sound, counters — well under 10,000 cycles total). Merging them into one state saves 1 TV frame.
+### S-4: Merge $C87E States 0+4 — IMPLEMENTED (2026-03-12)
 
-**Implementation:** In each race dispatcher, make state 0 handler do the work of both state 0 and state 4, then advance $C87E by 8 instead of 4. State 4 entry in the jump table becomes dead code (point to state 8 handler as fallback).
+The game takes 3 TV frames per game frame because states 0 and 4 each consume a full TV frame doing minimal work (VDP sync, sound, counters — well under 10,000 cycles total). Merging them into one state saves 1 TV frame. **S-1's failure does not block S-4** — the SH2 work already fits within 2 TV frames based on the Master SH2 profiling data (185K cycles / 128K per TV frame ≈ 1.45 TV frames).
+
+**Implementation:** In each race dispatcher, `ADDQ.W #8,($FFFFC87E).w` replaces `ADDQ.W #4` — skips state 4 entirely. Achieves 30 FPS. Master SH2 load drops ~29.1%.
 
 **Files:** `state_disp_004cb8.asm`, `state_disp_005020.asm`, `state_disp_005308.asm`, `state_disp_005618.asm`, `state_disp_005586.asm`
 
-**Impact:** Enables 2-TV-frame operation = **30 FPS**, conditional on S-1 bringing SH2 render time to ≤2 TV frames.
+**Impact:** Achieves 2-TV-frame operation = **30 FPS**. No crashes.
 
-**Risk:** Low. States 0 and 4 do ~5,000-10,000 cycles of work combined — trivially fits in one TV frame.
+**Game speed issue:** 30 FPS means 1.5× frame rate → 1.5× game speed because ALL timing uses fixed per-frame deltas with no delta-time system. This is solved by S-4b (speed compensation).
+
+### S-4b: Speed Compensation for 30 FPS — PARTIAL (2026-03-12)
+
+**Problem:** The game has no delta-time system. All physics, timers, and animations use fixed per-frame constants designed for 20 FPS (3 TV frames/game frame). At 30 FPS (2 TV frames), everything runs 1.5× too fast.
+
+**Key discovery:** Timing is NOT scattered across 100+ sites. There are clear choke points — ~10 specific locations in 5 core functions, ~20 lines of assembly total.
+
+**Changes applied (constant-only, zero section size change):**
+
+| File | Change | Method |
+|------|--------|--------|
+| `race_entity_update_loop.asm` | Scale deceleration constants | `$2000→$1555`, `$1800→$1000` |
+| `speed_interpolation.asm` | Scale smoothing multiplier | `$0284→$01AD` |
+| `cascaded_frame_counter.asm` | Scale sub-tick reset | `$C4→$A6` (90 ticks at 30 FPS = 3 sec) |
+| `ai_timer_inc.asm` | Scale sub-tick reset | `$C4→$A6` |
+
+**Pending — target speed scaling:** Entity cruising speed is still 1.5× too fast because the speed lookup table target is unscaled. Adding `MULU.W #$AAAB` to scale the target by 2/3 requires +6 bytes, but both candidate sections are packed to exact boundaries:
+- code_6200 ($6200-$81FF): Contains `object_type_dispatch.asm` with hardcoded absolute addresses in a DC.W+MOVEQ jump table. Adding bytes shifts subsequent modules, breaking the jump table.
+- code_A200 ($A200-$C1FF): Contains `entity_type_dispatch_tables.asm` with hardcoded DC.L absolute addresses. Cross-section JSR absolute references also target this region.
+
+**Candidate fix:** Scale the speed lookup table DATA values by 2/3 (at file offset $19DA4, referenced via `LEA $00899DA4,A1`). This requires zero code changes. Needs verification of table boundaries and that no other code depends on the original values.
 
 ### Phase 1 Critical Path
 
 ```
-S-1c (commit Phase 2 handler)
-  → S-1d (profile: does SH2 workload actually drop?)
-    → S-1e (tune LOD threshold if needed)
-      → S-4 (merge states → 30 FPS)
-        → Profile to confirm 30 FPS
+S-4 (state merge → 30 FPS) ✓ DONE
+  → S-4b (speed compensation) — constant scaling DONE, target speed scaling PENDING
+  → Test in PicoDrive: verify game speed with current partial compensation
+  → Complete target speed scaling (data table approach)
 ```
 
 ---
@@ -162,19 +189,15 @@ S-1c (commit Phase 2 handler)
 
 These items can be worked in parallel once Phase 1 is validated. They deepen SH2 savings and prepare for 60 FPS.
 
-### S-5: Behind-Camera Culling (S-1 enhancement)
+### S-5: Behind-Camera Culling — NEEDS RE-EVALUATION
 
-The current LOD culling uses axis-aligned distance only ($0600 on each axis). Entities behind the player's heading direction are invisible even within 1536 units — e.g., after passing them on a straight.
+**Original design** depended on S-1 entity descriptor infrastructure, which targets unused data structures during racing. The concept (cull entities behind the camera) is sound, but the implementation needs to target the **correct data path** — either the Master cmd `$23` Huffman renderer's data at `$0600C800` or a new mechanism.
 
-**Implementation:** After the distance check passes in `object_table_sprite_param_update_impl`, compute a heading-relative test: `(entity_pos - player_pos) · player_heading_vector`. If negative (behind camera), mark invisible. Use the player's heading angle (available in entity data at +$BC or rotation field) with existing sine/cosine tables for the direction vector. Use a ~120° forward cone (not strict 180°) to avoid pop-in during turns.
+**Impact:** Unknown until the correct rendering data structure is understood.
 
-**Impact:** Additional ~5-10% SH2 reduction on top of S-1 (catches ~2-3 more entities per frame).
+**Risk:** Medium-High. Requires understanding how the Huffman renderer at `$06004AD0` selects which entities to render.
 
-**Risk:** Medium. Need margin angle to prevent pop-in. 68K has ample idle time for the extra computation.
-
-**Dependency:** S-1d (verify base culling works first).
-
-**Files:** `disasm/modules/68k/game/render/object_table_sprite_param_update.asm`
+**Dependency:** Understanding Master cmd `$02`/`$23` data flow (new research needed).
 
 ### S-6: SH2 coord_transform Batching
 
@@ -232,19 +255,17 @@ With Master freed from block copies (S-7), redirect it to vertex transformation.
 
 **Dependency:** S-7 (DMAC must handle copies so Master is available for compute).
 
-### S-9: Frustum Pre-Culling on 68K
+### S-9: Frustum Pre-Culling on 68K — NEEDS RE-EVALUATION
 
-`frustum_cull_short` consumes **12% of Slave budget** doing per-polygon visibility testing. The 68K has 51.89% idle time and already knows camera position + entity positions from the physics/collision system.
+`frustum_cull_short` was attributed to the Slave SH2 at **12% of budget**, but the S-1d investigation revealed the Slave is NOT used for polygon rendering. The 3D pipeline runs on the **Master SH2**. The actual CPU and budget allocation for frustum culling needs re-measurement.
 
-**Implementation:** Coarse per-entity frustum test on the 68K: check entity bounding volumes against camera frustum planes. Mark entire entities (or entity faces) as "definitely outside frustum" via extended visibility flags communicated through the existing bitmask infrastructure.
+**Original concept** (coarse per-entity frustum test on 68K) remains valid, but the communication mechanism must target the correct data path (Master's Huffman renderer data at `$0600C800`), not the entity descriptors at `$0600C344`.
 
-**Impact:** If 30% of entity polygons are frustum-culled on the 68K and entity polygons are 60% of total: 30% × 60% × 12% = ~2.2% direct savings from skipped frustum tests, plus ~4-5% from skipped rasterization of those polygons = **~5-12% Slave reduction**.
+**Impact:** Unknown — requires re-profiling with Master/Slave distinction.
 
-**Risk:** Medium. The 68K has entity positions/orientations but not per-polygon vertex data. Only coarse per-entity bounds checks are feasible, not per-polygon culling.
+**Risk:** Medium. Depends on understanding the Huffman renderer's input format.
 
-**Dependency:** S-1 infrastructure (bitmask mechanism).
-
-**Files:** `disasm/modules/68k/game/render/object_table_sprite_param_update.asm`, `disasm/sh2/expansion/vis_bitmask_handler.asm`
+**Dependency:** Understanding Master cmd `$02`/`$23` data flow (new research needed).
 
 ### S-2: Reduce sh2_send_cmd Call Count (unchanged from v8.0)
 
@@ -255,11 +276,12 @@ Currently 14 `sh2_send_cmd` calls per frame. Some may be combinable (adjacent me
 ### Phase 2 Dependency Map
 
 ```
-S-5 (behind-camera cull)     — independent, extends S-1
+S-5 (behind-camera cull)     — NEEDS RE-EVALUATION (S-1 data structures unused)
 S-6 (coord_transform batch)  — independent
 S-7 (DMAC block copies)      → S-8 (Master vertex transform)
-S-9 (frustum pre-cull)       — depends on S-1 bitmask infra
+S-9 (frustum pre-cull)       — NEEDS RE-EVALUATION (must target correct rendering path)
 S-2 (reduce cmd count)       — independent
+NEW: Huffman renderer analysis — required to unlock S-5/S-9 alternatives
 ```
 
 ---
@@ -321,9 +343,9 @@ S-1 complete ──────── C-3 (tick-rate reduction) — independent
 
 ## Impact Estimate Summary
 
-| Item | Slave SH2 Reduction | FPS Effect | Risk | Phase |
-|------|---------------------|------------|------|-------|
-| **S-1 (LOD entity culling)** | **15-40%** | **Enables 30 FPS** | Medium | 1 |
+| Item | SH2 Reduction | FPS Effect | Risk | Phase |
+|------|---------------|------------|------|-------|
+| ~~S-1 (LOD entity culling)~~ | ~~15-40%~~ **0% (DEAD END)** | None | — | ~~1~~ |
 | **S-4 (state merge)** | 0% (saves 1 TV frame) | **30 FPS** | Low | 1 |
 | S-5 (behind-camera cull) | 5-10% additive | Headroom | Medium | 2 |
 | S-6 (coord_transform batch) | ~6% | Headroom | Medium | 2 |
@@ -364,8 +386,9 @@ These don't improve FPS (68K has spare capacity) but are low-risk code improveme
 | M-001 | STOP instruction (V-blank sync) | ~73.6M/2400 frames | 0% (freed 68K) |
 | M-002 | Insertion sort (depth_sort) | 85% reduction | 0% (freed 68K) |
 | M-003 | Longword copy (cmd_22 handler) | ~2M/2400 frames | 0% (freed 68K) |
-| S-1a | LOD distance culling (68K side) | TBD (S-1d) | TBD |
-| S-1b | Visibility bitmask communication (COMM3 cmd $07) | TBD (S-1d) | TBD |
+| S-1a | LOD distance culling (68K side) | 0 (entity descriptors unused during racing) | 0% |
+| S-1b | Visibility bitmask communication (COMM3 cmd $07) | 0 (targets unused data structures) | 0% |
+| S-1d | Profile and verify LOD impact (4 tests) | N/A | 0% — **proved S-1 is a dead end** |
 | **Total (68K)** | | **~84M/2400 frames** | **0% — 68K freed from 100% → 48%** |
 
 **Why 0% FPS gain from 68K work:** All savings freed 68K capacity. The Slave SH2 was always the true bottleneck.
@@ -417,6 +440,7 @@ Free from $3011E0: ~1,019 KB (99.8%)
 | Work RAM ring buffer for SH2 | SH2 cannot access 68K Work RAM ($FFxxxx) | Always check hardware manual memory map |
 | 68K in-section async queue | 0 bytes free in $E200 section | Use in-place replacement or expansion ROM |
 | 68K cycle reduction for FPS | M-001/M-002/M-003 freed 68K from 100% → 48% → 0% FPS change | SH2 is the bottleneck, not 68K |
+| S-1 entity visibility culling | Entity descriptors at $0600C344 are unused during racing. Loop at $06002C8C never executes. Racing uses Huffman renderer ($06004AD0) with different data ($0600C800, stride $10) | Always profile before assuming which data structures are active |
 | FIFO burst optimization (B-009) | func_065 writes SDRAM not framebuffer | Static analysis before implementation |
 
 ---

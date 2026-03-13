@@ -9,7 +9,10 @@
  *
  * Sequential mapping: 68K entities 0-14 → SH2 descriptors at
  * $0600C344 + N*$14 (contiguous groups A-D, stride $14 = 20 bytes).
- * All writes use cache-through addresses ($2200xxxx).
+ * Descriptor writes use cacheable addresses ($0600xxxx) so the Master SH2's
+ * own data cache is updated (SH7604 write-through policy). Using cache-through
+ * ($2200xxxx) would bypass the cache, leaving stale "visible" flags from the
+ * previous frame — the entity loop would never see our patches.
  *
  * The Slave SH2 entity loops check MOV.W @(0,R14),R0 / CMP/EQ #0,R0 / BT
  * at the start of each iteration. Flag=0 → skip all rendering for that
@@ -20,7 +23,7 @@
  *   COMM0_LO (offset 1):  $07 — dispatch index; cleared to $00 by SH2
  *   COMM3    (offset 6,7): 15-bit visibility bitmask (bit N = entity N)
  *
- * Entity Descriptors (cache-through base $2200C344):
+ * Entity Descriptors (cacheable base $0600C344):
  *   Stride: $14 (20 bytes), flag word at offset +0
  *   15 descriptors patched: entities 0-4 (group A), 5-12 (group B),
  *   13-14 (group C first 2 of 5)
@@ -46,7 +49,7 @@ vis_bitmask_handler:
     /* offset 10 */ mov.b   r0,@(1,r8)          /* COMM0_LO = $00 (68K can proceed)  $8081 */
 
     /* --- Setup descriptor patching loop --- */
-    /* offset 12 */ mov.l   @(.desc_base,pc),r2 /* R2 = $2200C344 (1st descriptor)   $D20B */
+    /* offset 12 */ mov.l   @(.desc_base,pc),r2 /* R2 = $0600C344 (1st descriptor)   $D20B */
     /* offset 14 */ mov     #1,r6               /* R6 = 1 (visible flag + test mask)  $E601 */
     /* offset 16 */ mov     #0,r1               /* R1 = 0 (invisible flag value)      $E100 */
     /* offset 18 */ mov     #15,r3              /* R3 = 15 iterations (entities 0-14) $E30F */
@@ -82,7 +85,7 @@ vis_bitmask_handler:
 
 /* === LITERAL POOL ===
  * Offset 56: $2203E020 — bitmask storage (cache-through SDRAM)
- * Offset 60: $2200C344 — first entity descriptor (cache-through SDRAM)
+ * Offset 60: $0600C344 — first entity descriptor (cacheable SDRAM)
  *
  * MOV.L at offset 4 → disp = ($3011D8 - $3011A8) / 4 = $30/4 = 12
  * MOV.L at offset 12 → disp = ($3011DC - $3011B0) / 4 = $2C/4 = 11
@@ -93,7 +96,7 @@ vis_bitmask_handler:
 .vis_sdram:
     .long   0x2203E020          /* SDRAM visibility bitmask (cache-through) */
 .desc_base:
-    .long   0x2200C344          /* First entity descriptor (cache-through) */
+    .long   0x0600C344          /* First entity descriptor (cacheable, write-through) */
 
 /* Total: 64 bytes ($3011A0-$3011DF) */
 .global vis_bitmask_handler

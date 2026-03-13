@@ -276,21 +276,25 @@ struct PolygonDescriptor {
 
 ## CPU Work Distribution
 
-### Master SH2 Responsibilities
-- Main pipeline coordination
-- Polygon transformation
-- Hardware register updates
-- Frame synchronization
+*Corrected March 2026 — Primary dispatch at $020460 is Master SH2, not Slave.*
 
-### Slave SH2 Responsibilities
-- Parallel polygon processing (likely)
-- Texture decompression
-- Additional vertex transforms
+### Master SH2 Responsibilities (0-36% utilization)
+- COMM dispatch loop (primary at $020460, polls COMM0_HI → reads COMM0_LO → JSR handler)
+- Block copy commands (cmd_22 longword copy, cmd_27 pixel ops)
+- 3D pipeline coordination
+- Frame synchronization via COMM0_HI busy flag
+
+### Slave SH2 Responsibilities (78.3% utilization — THE BOTTLENECK)
+- 3D rendering pipeline (Huffman renderer at $06004AD0, data at $0600C800)
+- Polygon transformation and vertex processing
+- Palette operations, scene commands (secondary dispatch at $020592 via COMM2)
+- cmd_27 pixel operations (delegated from Master)
 
 **Synchronization Points**:
-- COMM registers (0x20004020-0x2000402E)
-- Shared SDRAM buffers (0x22000000+)
-- Interrupt-based handshakes
+- COMM registers ($20004020-$2000402E) — 16 bytes shared
+- SDRAM ($02000000-$0203FFFF) — shared data buffers
+- COMM0_HI = global busy flag, COMM0_LO = dispatch index
+- COMM7 = Slave doorbell (must NOT receive game command bytes)
 
 ---
 

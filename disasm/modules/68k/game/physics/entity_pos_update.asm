@@ -5,7 +5,6 @@
 ; sine/cosine lookups. Contains sub at $006FDE that multiplies speed by
 ; sin/cos and accumulates into D3 (X) and D4 (Y). Three dispatch paths:
 ; normal (heading_mirror), special (+$92 > 0), and alternate (+$62 != 0).
-;
 ; Entry: A0 = entity base pointer
 ; Uses: D0, D2, D3, D4, D5, D6, A0
 ; Object fields: +$06 speed, +$30 x_position, +$34 y_position,

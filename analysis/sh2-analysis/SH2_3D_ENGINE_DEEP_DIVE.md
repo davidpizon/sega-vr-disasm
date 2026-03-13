@@ -4,7 +4,9 @@ Detailed algorithmic analysis of the SH2 3D rendering engine used in Virtua Raci
 Covers the internal workings of key pipeline stages: visibility testing, rasterization,
 shading, and data flow.
 
-**Last Updated**: March 8, 2026
+**Last Updated**: March 12, 2026
+
+**Key discovery (March 2026):** Entity descriptors at `$0600C344` (the S-1 LOD culling target) are unused during racing. Racing uses the Huffman renderer at `$06004AD0` (Master cmd `$23`) with a separate data structure at `$0600C800` (stride `$10`, byte flags, 32 entries). The entity loop at `$06002C8C` never executes during autoplay race mode. S-1 LOD entity culling is a dead end for race performance.
 
 ## 1. Pipeline Overview
 
