@@ -39,7 +39,7 @@ state_disp_005020:
         dc.l    $008850DE                       ; $00503A  [0C] → $0050DE (past fn)
         dc.l    $0088573C                       ; $00503E  [10] → $00573C (past fn)
 ; --- state 0 handler ---
-        jsr     mars_dma_xfer_vdp_fill(pc); $4EBA $D87E
+        jsr     camera_snapshot_wrapper(pc); was: mars_dma_xfer_vdp_fill — now snapshots camera before DMA
         jsr     sound_update_disp+126(pc); $4EBA $D10C
         jsr     cascaded_frame_counter+10(pc); $4EBA $6052
         jsr     cascaded_frame_counter(pc); $4EBA $6044

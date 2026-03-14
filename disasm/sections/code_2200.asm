@@ -80,9 +80,96 @@
         include "modules/68k/game/state/calc_state_from_flags_2.asm"
 ; Trampoline: implementation relocated to code_1c200 for LOD culling expansion (S-1)
 ; Padded to original 216 bytes to preserve PC-relative offsets in subsequent functions.
+; Free space after JMP used for frame-rate interpolation routines (A1-A3).
 object_table_sprite_param_update:
         jmp     $00880000+object_table_sprite_param_update_impl  ; 6 bytes
-        dcb.b   210,$FF                         ; padding to 216 bytes
+
+; ============================================================================
+; camera_snapshot_wrapper — Wraps mars_dma_xfer_vdp_fill with camera snapshot
+; Called from state 0 handlers in place of mars_dma_xfer_vdp_fill.
+; Saves prev/curr camera buffer at $FF6080/$FF6090 for interpolation.
+; Clobbers: D0-D3 (already trashed by mars_dma_xfer_vdp_fill)
+; ============================================================================
+camera_snapshot_wrapper:
+        ; Snapshot current $FF6100 BEFORE DMA (these are this frame's camera params)
+        ; Step 1: curr → prev
+        lea     $00FF6090,a0
+        lea     $00FF6080,a1
+        movem.l (a0),d0-d3                     ; load 16 bytes from curr
+        movem.l d0-d3,(a1)                     ; store to prev
+        ; Step 2: $FF6100 → curr
+        lea     $00FF6100,a0
+        lea     $00FF6090,a1
+        movem.l (a0),d0-d3                     ; load 16 bytes from camera buffer
+        movem.l d0-d3,(a1)                     ; store to curr snapshot
+        ; Step 3: call original DMA function
+        jsr     mars_dma_xfer_vdp_fill(pc)
+        rts
+
+; ============================================================================
+; camera_avg_and_redma — Average camera and re-send DMA to SH2
+; Averages 8 words between prev ($FF6080) and curr ($FF6090),
+; writes result to $FF6100, then re-DMAs $FF6000 block to SH2.
+; Clobbers: D0, D7, A0-A2 (plus whatever mars_dma_xfer_vdp_fill uses)
+; Size: 38 bytes
+; ============================================================================
+camera_avg_and_redma:
+        lea     $00FF6080,a0                   ; prev snapshot
+        lea     $00FF6090,a1                   ; curr snapshot
+        lea     $00FF6100,a2                   ; camera buffer output
+        moveq   #7,d7                          ; 8 words to average
+.avg_loop:
+        move.w  (a0)+,d0                       ; prev[i]
+        add.w   (a1)+,d0                       ; prev + curr
+        asr.w   #1,d0                          ; / 2
+        move.w  d0,(a2)+                       ; store averaged
+        dbra    d7,.avg_loop
+        jsr     mars_dma_xfer_vdp_fill(pc)     ; re-DMA to SH2
+        rts
+
+; ============================================================================
+; state4_epilogue — State 4 tail: block-copy + swap + interpolation + re-DMA
+; Tail-jumped from frame_update_orch_005070 (state 4 handler).
+;
+; 1. Sends 2 sh2_send_cmd block copies to capture the CURRENT SH2 render
+;    (camera N) to the framebuffer before re-DMA overwrites SDRAM.
+; 2. Swaps frame buffer → displays camera N render (first swap = 40 FPS).
+; 3. Averages camera, re-DMAs → SH2 re-renders with interpolated camera.
+;    State 8's existing block copies + swap will display this second render.
+;
+; Size: 102 bytes
+; ============================================================================
+state4_epilogue:
+; --- Block-copy current SH2 render (camera N) to framebuffer ---
+; Same params as sh2_geometry_transfer_and_palette_cycle_handler
+        movea.l #$06038000,a0                  ; 3D geometry source (SDRAM)
+        movea.l #$04012010,a1                  ; framebuffer dest
+        move.w  #$0120,d0                      ; width = 288 pixels
+        move.w  #$0030,d1                      ; height = 48 rows
+        jsr     $0088E35A                      ; sh2_send_cmd (abs.l, PC-rel too far)
+        movea.l #$0603B600,a0                  ; sprite data source (SDRAM)
+        movea.l #$0401B010,a1                  ; framebuffer dest
+        move.w  #$0120,d0                      ; width = 288 pixels
+        move.w  #$0018,d1                      ; height = 24 rows
+        jsr     $0088E35A                      ; sh2_send_cmd
+; --- Swap frame buffer (COMM1_LO bit 0 set after last block copy) ---
+        btst    #0,COMM1_LO                    ; SH2 block copy done?
+        beq.s   .no_swap                       ; no → skip (shouldn't happen)
+        bclr    #0,COMM1_LO                    ; clear done flag
+        bchg    #0,($FFFFC80C).w               ; flip frame toggle
+        bchg    #0,$00A1518B                   ; toggle FS bit (swap display)
+.no_swap:
+; --- Interpolate camera and trigger second SH2 render ---
+        jsr     camera_avg_and_redma(pc)
+; --- Original state 4 epilogue ---
+        addq.w  #4,($FFFFC87E).w               ; advance game_state
+        move.w  #$001C,$00FF0008               ; V-INT state = sprite_cfg
+        rts
+
+; Padding to maintain 216-byte total trampoline size.
+; Code = 6 (JMP) + 46 (snapshot) + 38 (avg) + 102 (epilogue) = 192 bytes.
+; Padding = 216 - 192 = 24 bytes.
+        dcb.b   24,$FF
         include "modules/68k/game/collision/object_proximity_check_jump_table_dispatch.asm"
         include "modules/68k/game/state/conditional_return_on_disp_flag.asm"
         include "modules/68k/game/collision/proximity_check_with_sine_billboard.asm"

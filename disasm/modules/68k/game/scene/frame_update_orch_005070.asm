@@ -32,6 +32,5 @@ frame_update_orch_005070:
         jsr     ai_buffer_setup+14(pc)  ; $4EBA $60A2
         jsr     ai_buffer_setup+28(pc)  ; $4EBA $60AC
         jsr     entity_render_pipeline_with_vdp_dma_2p_copy+462(pc); $4EBA $1380
-        addq.w  #4,($FFFFC87E).w               ; $005090  advance game_state
-        move.w  #$001C,$00FF0008               ; $005094  display mode = $001C
-        rts                                     ; $00509C
+        jmp     state4_epilogue(pc)            ; tail-jump: interp + state advance
+        dcb.b   10,$FF                         ; padding to maintain 46-byte function size
