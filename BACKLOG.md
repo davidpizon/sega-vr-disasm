@@ -28,23 +28,18 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
 
 ### S-4: Merge $C87E States 0+4 (Phase 1 — 30 FPS)
-**Status:** DONE (2026-03-12) — 30 FPS achieved, partial speed compensation applied
-**Priority:** P1 — enables 2-TV-frame operation = 30 FPS
-**Why:** The game takes 3 TV frames per game frame because states 0 and 4 each consume a full TV frame doing minimal work (~5,000-10,000 cycles combined). Merging them into one state saves 1 TV frame.
-**Implementation:** `ADDQ.W #8,($FFFFC87E).w` in 5 race dispatchers skips state 4. Speed compensation (S-4b) adjusts deceleration constants ($2000→$1555, $1800→$1000), smoothing multiplier ($0284→$01AD), and timer sub-tick resets ($C4→$A6).
-**Key files:** `state_disp_004cb8.asm`, `state_disp_005020.asm`, `state_disp_005308.asm`, `state_disp_005618.asm`, `state_disp_005586.asm`, `race_entity_update_loop.asm`, `speed_interpolation.asm`, `cascaded_frame_counter.asm`, `ai_timer_inc.asm`
-**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
+**Status:** REVERTED (2026-03-14) — cascading regressions, constant scaling approach too fragile
+**Priority:** P1
+**Why:** Skip state 4 in race dispatchers to achieve 30 FPS. Mechanically worked, but required compensating timing constants across 20+ files (S-4b/S-4c). After 3 sessions of regression chasing (broken collision physics, missing checkpoint music, attract mode desync, menu slowdowns, frame stuttering), the approach was abandoned.
+**Lesson:** 30 FPS should come from SH2 workload reduction (~15%), not state machine hacking. The game's timing is too deeply coupled for constant patching.
+**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-4
 
-### S-4b: Target Speed Scaling (Remaining Speed Compensation)
-**Status:** OPEN — next task
-**Priority:** P1 — entities still move 1.5× too fast at 30 FPS
-**Why:** `entity_pos_update` applies entity speed (A0+$06) to position 30×/sec instead of 20×/sec. Constant scaling (decel, smoothing, timers) is done, but the cruising speed TARGET is unscaled.
-**Approach A (recommended):** Scale the 384-entry speed lookup table at file offset $19DA4 (CPU $00899DA4, in `code_18200.asm`) by 2/3. Zero code changes, zero section size impact. Referenced only by `speed_interpolation`. Math: (target × 2/3) at 30 FPS = target × 20/sec = original. The smoothing multiplier scaling ($0284→$01AD) is independent (controls convergence rate, not target value) — no double-scaling risk.
-**Approach B (alternative):** Wrap the inner sub `entity_pos_update+70` ($006FDE) with D2 speed scaling. Catches all speed sources (not just the table). Requires finding free space reachable from both call sites (entity_pos_update line 28, ai_entity_main_update_orch line 208).
-**Blocked approach:** Inline MULU #$AAAB in entity_pos_update — code_6200 is packed with hardcoded absolute address jump tables. Proven crash.
-**Caveat:** Entity speed (A0+$06) is also written by `entity_force_integration_and_speed_calc` and `entity_speed_acceleration_and_braking`. The data-table approach only scales the `speed_interpolation` target. Verify during testing.
-**Key files:** `disasm/sections/code_18200.asm` (table data), `speed_interpolation.asm`, `entity_pos_update.asm`
-**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-4b, [KNOWN_ISSUES.md](KNOWN_ISSUES.md) §Section Packing
+### S-6: SH2 coord_transform Batching (NEW PRIMARY PATH)
+**Status:** OPEN
+**Priority:** P1 — primary path to 30 FPS via SH2 workload reduction
+**Why:** `coord_transform` is 17% of Slave SH2 frame time. Batching 4 per-vertex calls into 1 eliminates redundant base value loads and 3 BSR/RTS pairs. Estimated ~6% SH2 reduction.
+**Key files:** `disasm/sh2/3d_engine/coord_transform.asm`, quad_batch callers
+**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-6
 
 ---
 

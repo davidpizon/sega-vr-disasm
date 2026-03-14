@@ -24,7 +24,7 @@ speed_interpolation:
         add.w   d0,d0                   ; Word offset (index * 2)
         move.w  (a1,d0.w),d1            ; $3231 $0000 — read target speed from table
         sub.w   $16(a0),d1              ; Delta = target - current speed
-        muls.w  #$01AD,d1               ; S-4b: $0284*2/3=$01AD for 30 FPS; (x*429)>>16 ≈ x/152.7
+        muls.w  #$0284,d1               ; Approx divide by 103: (x*644)>>16 ≈ x/101.8
         swap    d1                       ; Extract result from high word
         move.w  $8(a0),d0               ; Load secondary speed field
         sub.w   $6(a0),d0               ; Remaining = secondary - accumulated

@@ -35,7 +35,7 @@ ai_timer_inc:
         bge.s   .done                           ; $00B0FC  yes → done (maxed)
         addq.b  #1,$0002(A0)                    ; $00B0FE  byte[2]++
         bne.s   .done                           ; $00B102  no overflow → done
-        move.b  #$A6,$0002(A0)                  ; $00B104  S-4b: $C4→$A6 (90 ticks at 30 FPS = 3 sec)
+        move.b  #$C4,$0002(A0)                  ; $00B104  byte[2] = $C4 (carry)
         addq.b  #1,$0001(A0)                    ; $00B10A  byte[1]++
         bne.s   .done                           ; $00B10E  no overflow → done
         move.b  #$C4,$0001(A0)                  ; $00B110  byte[1] = $C4 (carry)

@@ -1,7 +1,7 @@
 # Virtua Racing 32X — Optimization Strategy
 
-**Version:** v9.1 (S-4b speed compensation analysis)
-**Last Updated:** March 13, 2026
+**Version:** v10.0 (S-4 reverted — SH2-first strategy)
+**Last Updated:** March 14, 2026
 **Baseline:** ~20 FPS (3 TV frames per game frame, measured)
 **Primary Target:** 30 FPS (2 TV frames per game frame)
 **Stretch Goal:** 60 FPS (requires pipeline overlap — see Phase 3)
@@ -141,68 +141,67 @@ Racing uses the **Huffman renderer** at `$06004AD0` (Master cmd `$23`) and a com
 
 **Committed code:** S-1a (LOD culling) and S-1b (bitmask communication) remain in the codebase. The vis_bitmask_handler at `$3011A0` is functional but patches unused data. These may become useful if the entity descriptors are used in other game modes (non-racing scenes).
 
-### S-4: Merge $C87E States 0+4 — IMPLEMENTED (2026-03-12)
+### S-4: Merge $C87E States 0+4 — REVERTED (2026-03-14)
 
-The game takes 3 TV frames per game frame because states 0 and 4 each consume a full TV frame doing minimal work (VDP sync, sound, counters — well under 10,000 cycles total). Merging them into one state saves 1 TV frame. **S-1's failure does not block S-4** — the SH2 work already fits within 2 TV frames based on the Master SH2 profiling data (185K cycles / 128K per TV frame ≈ 1.45 TV frames).
+**Concept:** Skip state 4 in race dispatchers (`ADDQ #4` → `ADDQ #8`) to achieve 2-TV-frame operation = 30 FPS. Mechanically worked — achieved 30 FPS immediately.
 
-**Implementation:** In each race dispatcher, `ADDQ.W #8,($FFFFC87E).w` replaces `ADDQ.W #4` — skips state 4 entirely. Achieves 30 FPS. Master SH2 load drops ~29.1%.
+**Problem:** The game has no delta-time system. ALL timing (physics, timers, animations, collision, sound triggers, replay buffers) uses fixed per-frame constants designed for 20 FPS. At 30 FPS, everything runs 1.5× too fast. Compensating required scaling constants across 20+ files, creating a fragile equilibrium that kept breaking.
 
-**Files:** `state_disp_004cb8.asm`, `state_disp_005020.asm`, `state_disp_005308.asm`, `state_disp_005618.asm`, `state_disp_005586.asm`
+**What was attempted (March 12-14, 2026):**
 
-**Impact:** Achieves 2-TV-frame operation = **30 FPS**. No crashes.
+1. **S-4 state merge** — `ADDQ #8` in 5 race dispatchers. Worked mechanically.
+2. **S-4b constant scaling** — ×2/3 physics constants, ×1.5 timers, ×2/3 speed table across 10+ files. Created a coordinated equilibrium that was extremely sensitive — changing any one component broke the others.
+3. **S-4c delta-time trampolines** — `delta_time_compute` + `scaled_pos_update` in code_2200 padding. Three iterations (÷3, then ÷2+bypass, then revised bypass) each fixed one problem but introduced another.
 
-**Game speed issue:** 30 FPS means 1.5× frame rate → 1.5× game speed because ALL timing uses fixed per-frame deltas with no delta-time system. This is solved by S-4b (speed compensation).
+**Regressions that could not be fully resolved:**
+- Collision physics broken (car crashes/flips after minor contact)
+- Time bonus music missing at checkpoints
+- Attract mode ends early (replay consumed 50% faster at 30 FPS)
+- Menu animations affected by speed table changes
+- Frame stuttering from delta-time scaling transitions
+- Each fix introduced new regressions in a whack-a-mole pattern
 
-### S-4b: Speed Compensation for 30 FPS — PARTIAL (2026-03-12)
+**Why it failed:** The game's timing is deeply coupled across hundreds of code paths. Patching constants in isolation is fundamentally fragile — there's no single "speed multiplier" to adjust. Physics, collision response, sound triggers, replay systems, animation counters, and AI all have independent frame-rate assumptions baked into their constants.
 
-**Problem:** The game has no delta-time system. All physics, timers, and animations use fixed per-frame constants designed for 20 FPS (3 TV frames/game frame). At 30 FPS (2 TV frames), everything runs 1.5× too fast.
+**Lesson learned:** 30 FPS should come from **reducing SH2 workload** so the existing 3-TV-frame pipeline completes in 2 TV frames naturally, not from hacking the state machine to skip frames. The SH2 needs ~15% reduction to fit in 2 TV frames (current: ~2.35 TV frames of work). This is the Phase 2 strategy.
 
-**Key discovery:** Timing is NOT scattered across 100+ sites. There are clear choke points — ~10 specific locations in 5 core functions, ~20 lines of assembly total.
+**All S-4/S-4b/S-4c code fully reverted.** Game is back to stable 20 FPS with original physics, collision, sound, and timing behavior. S-4 constant tables preserved in this section for reference if the approach is revisited with a proper delta-time engine.
 
-**Changes applied (constant-only, zero section size change):**
+<details>
+<summary>S-4b constant reference (collapsed — for future reference only)</summary>
 
-| File | Change | Method |
-|------|--------|--------|
-| `race_entity_update_loop.asm` | Scale deceleration constants | `$2000→$1555`, `$1800→$1000` |
-| `speed_interpolation.asm` | Scale smoothing multiplier | `$0284→$01AD` |
-| `cascaded_frame_counter.asm` | Scale sub-tick reset | `$C4→$A6` (90 ticks at 30 FPS = 3 sec) |
-| `ai_timer_inc.asm` | Scale sub-tick reset | `$C4→$A6` |
+**Physics constants (race-only):**
 
-**Pending — target speed scaling:** Entity cruising speed is still 1.5× too fast. `entity_pos_update` reads speed from entity field A0+$06, multiplies by sin/cos for position delta. At 30 FPS, this runs 1.5× per second → entities move 1.5× too far per second.
+| File | Original | S-4b (×2/3) | Purpose |
+|------|----------|-------------|---------|
+| `entity_speed_acceleration_and_braking.asm` | ±$0400 | ±$02AB | Speed delta clamp |
+| `entity_force_integration_and_speed_calc.asm` | $71C0 | $4BD5 | Air resistance |
+| `entity_force_integration_and_speed_calc.asm` | $0190 | $0258 (×1.5) | Force divisor |
+| `speed_calculation.asm` | $0738 | $04D0 | Speed boost/frame |
+| `race_entity_update_loop.asm` | $2000, $1800 | $1555, $1000 | Deceleration |
+| `speed_interpolation.asm` | $0284 | $01AD | Smoothing multiplier |
 
-Adding inline scaling (MULU #$AAAB + SWAP, 6 bytes) is impossible — both code_6200 and code_A200 are packed to exact section boundaries with hardcoded absolute address jump tables that break when code shifts (see KNOWN_ISSUES.md §Section Packing). Proven crash in attract mode.
+**Timer values (×1.5):** Across `entity_speed_acceleration_and_braking`, `entity_force_integration_and_speed_calc`, `tire_screech_sound_trigger_053`, `object_timer_expire_speed_param_reset`, `scene_camera_init`, `effect_timer_mgmt`, `cascaded_frame_counter`, `ai_timer_inc`.
 
-**Primary approach — scale speed lookup table DATA by 2/3:**
-- Table: 384 word entries at file offset $19DA4 (CPU $00899DA4), in section code_18200
-- Referenced only by `speed_interpolation` via `LEA $00899DA4,A1`
-- Zero code changes, zero section size impact
-- Math: table_value × 2/3 → entity converges to lower speed → at 1.5× frame rate, movement/sec = (2/3 × target) × 30 = target × 20 = original
-- The smoothing multiplier ($0284→$01AD) is INDEPENDENT — it controls convergence RATE, not the target value. Both scalings are needed and don't double-apply.
-- **Caveat:** Entity speed (A0+$06) is also written by `entity_force_integration_and_speed_calc`, `entity_speed_acceleration_and_braking`, etc. These non-table code paths won't be scaled by this approach. Verify during testing whether non-table speeds cause visible issues.
+**Speed table:** 384 entries at $019DA4 in `code_18200.asm`, each multiplied by 2/3 (signed 16-bit).
 
-**Alternative approach — scale D2 in entity_pos_update+70 callers:**
-- The inner sub at `entity_pos_update+70` ($006FDE) is called from just 2 sites (entity_pos_update line 28, ai_entity_main_update_orch line 208). Both load D2 from A0+$06 just before calling.
-- A wrapper that scales D2 before calling +70 would catch ALL speed sources, not just the table.
-- Requires finding free space in a section reachable from both call sites, or restructuring the call to fit.
+</details>
 
-**Not viable:** Scaling inside entity_pos_update itself (code_6200 packed), scaling inside speed_interpolation (code_A200 packed).
-
-### Phase 1 Critical Path
+### Phase 1 Critical Path (Revised)
 
 ```
-S-4 (state merge → 30 FPS) ✓ DONE
-  → S-4b constant scaling ✓ DONE (decel, smoothing, timers)
-  → S-4b target speed scaling ← NEXT: scale 384-entry speed table in code_18200
-     Option A: Multiply all dc.w values at $19DA4 by 2/3 (data-only, safest)
-     Option B: Wrap entity_pos_update+70 with D2 scaling (code, catches all speed sources)
-  → Test in PicoDrive: verify 3D engine stability + game speed correctness
+S-1 (entity culling)     ✗ DEAD END — entity descriptors unused during racing
+S-4 (state merge + compensation) ✗ REVERTED — fragile constant scaling, cascading regressions
+→ NEW DIRECTION: Phase 2 SH2 optimization is now the primary path to 30 FPS
+  The SH2 needs ~15% workload reduction to naturally complete in 2 TV frames
+  This preserves ALL original game timing without constant hacking
 ```
 
 ---
 
-## Phase 2 — Headroom & 40+ FPS Foundation
+## Phase 2 — SH2 Optimization → 30 FPS (Primary Path)
 
-These items can be worked in parallel once Phase 1 is validated. They deepen SH2 savings and prepare for 60 FPS.
+**This is now the primary path to 30 FPS.** With S-4 reverted, the goal is to reduce SH2 workload by ~15% so the existing 3-TV-frame pipeline naturally completes in 2 TV frames. This preserves all original game timing, physics, and sound behavior — no constant hacking required.
 
 ### S-5: Behind-Camera Culling — NEEDS RE-EVALUATION
 

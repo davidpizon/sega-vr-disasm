@@ -95,8 +95,8 @@ race_entity_update_loop:
         jsr     effect_timer_mgmt(pc)   ; $4EBA $4932
         TST.W  $0004(A0)                        ; $005A20
         BEQ.S  .skip_decel                        ; $005A24
-        SUBI.W  #$1555,$00BC(A0)                ; $005A26  S-4b: $2000*2/3 for 30 FPS
-        SUBI.W  #$1000,$00C4(A0)                ; $005A2C  S-4b: $1800*2/3 for 30 FPS
+        SUBI.W  #$2000,$00BC(A0)                ; $005A26
+        SUBI.W  #$1800,$00C4(A0)                ; $005A2C
 .skip_decel:
         jsr     entity_heading_init+4(pc); $4EBA $2082
         LEA     $0093AC2C,A1                    ; $005A36

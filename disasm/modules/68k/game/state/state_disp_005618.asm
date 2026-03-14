@@ -6,8 +6,7 @@
 ; Purpose: Dispatches via 5-entry longword jump table indexed by
 ;   state_dispatch_idx ($C87E). State 0 handler: calls VDPSyncSH2,
 ;   sfx_queue_process, $0088BE, sprite_input_check, increments
-;   scene counter ($C886), advances state by 8 (S-4: skip state 4 →
-;   30 FPS), writes $10 to SH2 COMM.
+;   scene counter ($C886), advances state by 4, writes $10 to SH2 COMM.
 ;
 ; Uses: D0, D6, A0, A1, A6
 ; RAM:
@@ -36,6 +35,6 @@ state_disp_005618:
         jsr     camera_view_toggle_020(pc); $4EBA $327E
         jsr     sh2_handler_dispatch_scene_init+98(pc); $4EBA $0284
         addq.b  #1,($FFFFC886).w               ; $005646  scene counter++
-        addq.w  #8,($FFFFC87E).w               ; $00564A  S-4: skip state 4, advance 0→8
+        addq.w  #4,($FFFFC87E).w               ; $00564A  advance state
         move.w  #$0010,$00FF0008               ; $00564E  SH2 COMM = $10
         rts                                     ; $005656

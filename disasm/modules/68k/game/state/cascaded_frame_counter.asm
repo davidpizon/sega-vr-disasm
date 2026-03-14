@@ -39,7 +39,7 @@ cascaded_frame_counter:
         bge.s   .done                           ; $00B0B0  yes → done (saturated)
         addq.b  #1,$0002(A0)                    ; $00B0B2  sub-tick++
         bne.s   .done                           ; $00B0B6  no rollover → done
-        move.b  #$A6,$0002(A0)                  ; $00B0B8  S-4b: $C4→$A6 (90 ticks at 30 FPS = 3 sec)
+        move.b  #$C4,$0002(A0)                  ; $00B0B8  reset sub-tick to $C4
         andi.b  #$23,D0                         ; $00B0BE  check bits 0,1,5
         bne.s   .inc_tick                       ; $00B0C2  any set → skip decrement
         tst.b   ($FFFFC30D).w                   ; $00B0C4  race sub-flag active?
