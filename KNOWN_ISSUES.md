@@ -463,6 +463,22 @@ These are raw absolute addresses. Making them label-based (`dc.l label+$00880000
 
 ---
 
+## Camera Interpolation (40 FPS) — Implementation Notes
+
+### vasm `dcb.b (label_expr),val` Does Not Work
+When using `dcb.b (object_table_sprite_param_update+216-*),$FF` to compute padding dynamically, vasm evaluates `*` as the address BEFORE the code between the label and the `dcb.b`, producing incorrect padding. **Always use hardcoded byte counts** for `dcb.b` padding after trampoline code.
+
+### Trampoline Space Constraint
+The `object_table_sprite_param_update` trampoline in `code_2200.asm` has **24 bytes free** of 210 available (after 6-byte JMP). The 40 FPS implementation uses 186 bytes (46 snapshot + 38 interp + 102 epilogue). 60 FPS requires ~80 more bytes — must find additional ROM space.
+
+### State Dispatcher Coverage Gap
+Only `state_disp_005020` (active racing) is hooked for camera snapshot in state 0. The other 4 race dispatchers (`004cb8` pre-race, `005308` post-race, `005586` attract, `005618` replay) call `mars_dma_xfer_vdp_fill` directly without snapshots. Similarly, only `frame_update_orch_005070` (state 4 of `005020`) is hooked for the interpolation epilogue. Non-racing modes and other race phases still run at 20 FPS.
+
+### Frame Swap Without CMD INT
+The state 4 mid-frame swap toggles the FS bit (`bchg #0,$00A1518B`) and tracking flag (`bchg #0,($C80C).w`) but does NOT send CMD INT to the SH2. The original `vdp_dma_frame_swap_037` does `bclr #7,MARS_SYS_INTCTL` + wait + `bset #7` around the swap. Omitting CMD INT works in testing but could cause the SH2 to render to the displayed buffer in edge cases. Monitor for tearing artifacts.
+
+---
+
 ## 68K Section Space Constraints
 
 ### $00E200-$010200 Has 0 Bytes Free

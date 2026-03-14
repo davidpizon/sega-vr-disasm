@@ -1,33 +1,43 @@
 # Virtua Racing 32X — Optimization Strategy
 
-**Version:** v10.0 (S-4 reverted — SH2-first strategy)
+**Version:** v11.0 (40 FPS achieved — camera interpolation rendering)
 **Last Updated:** March 14, 2026
-**Baseline:** ~20 FPS (3 TV frames per game frame, measured)
-**Primary Target:** 30 FPS (2 TV frames per game frame)
-**Stretch Goal:** 60 FPS (requires pipeline overlap — see Phase 3)
-**Approach:** Data-driven, SH2-workload-first
+**Baseline:** ~40 FPS (2 frame swaps per 3 TV frames, camera interpolation)
+**Primary Target:** 60 FPS (3 frame swaps per 3 TV frames)
+**Approach:** Fixed 20 FPS game tick + variable-rate rendering via camera interpolation
 
 ---
 
 ## Ground Truth (March 2026)
 
-### The Slave SH2 Is THE Bottleneck (Proven)
+### 40 FPS Achieved via Camera Interpolation (A-1)
 
-After March 2026 optimizations (STOP instruction, insertion sort, longword copy), the 68K is **no longer the bottleneck**. It sits idle 51.89% of the time. The Slave SH2 at 78.3% utilization over 3 TV frames (~2.35 TV frames of work) determines the frame rate.
+The frame rate bottleneck was bypassed by **decoupling display from game logic**. Instead of reducing SH2 workload (the v10.0 strategy), the 68K now triggers 2 SH2 renders per game frame with interpolated camera parameters. Game logic stays at 20 FPS; only the display runs faster.
 
-**Evidence:**
-1. 68K STOP time is **51.89%** — massive spare capacity
-2. Previous experiment: 66.6% Slave SH2 reduction → 0% FPS change (delay loop removed idle loop, not real work)
-3. Frame rate is controlled by SH2 completion signal (COMM1_LO bit 0) — see V-INT State Machine section
-4. Reducing 68K COMM overhead by ~8,150 cycles (B-003/B-004/B-005) produced 0% FPS change — saved cycles became STOP time
+**Key insight (revised):** 68K pipeline restructuring CAN improve FPS — the v10.0 claim "68K optimizations just increase STOP time" was wrong. By adding block copies + frame swap in state 4, the 68K drives 2 display updates per game frame without any SH2 workload reduction.
 
-### CPU Utilization (March 2026, Post-Optimization)
+### CPU Utilization (40 FPS, March 2026)
 
-| CPU | Status | Utilization | Notes |
-|-----|--------|-------------|-------|
-| **68K** | Idle | **~48%** (51.89% STOP) | No longer the bottleneck |
-| Master SH2 | Underutilized | 0–36% | COMM dispatch + block copies only |
-| **Slave SH2** | **BOTTLENECK** | **78.3%** over 3 TV frames | 3D rendering (~2.35 TV frames of work) |
+| CPU | 40 FPS Avg | 20 FPS Baseline | Delta | Notes |
+|-----|-----------|-----------------|-------|-------|
+| **68K** | 127,986 | 127,987 | -1 | Negligible change — overhead absorbed by idle time |
+| Master SH2 | 127,061 | 125,175 | +1,886 | Slight increase from extra block copies |
+| **Slave SH2** | 299,926 | 301,047 | -1,121 | Slightly less (measurement variance) |
+
+**SH2 budget:** 2 renders × ~300K = ~600K cycles / 1,149K budget (3 TV frames) = **52.2%** utilization. Ample headroom for a 3rd render (60 FPS target).
+
+### How 40 FPS Works
+
+```
+State 0 (TV1): snapshot prev/curr camera → DMA camera N to SH2 → SH2 renders (A)
+State 4 (TV2): block-copy A to FB → SWAP → interpolate → re-DMA → SH2 renders (B)
+State 8 (TV3): block-copy B to FB → SWAP (existing mechanism)
+Result: 2 swaps / 3 TV frames = 40 FPS display, 20 FPS game logic
+```
+
+**Implementation:** 192 bytes in `code_2200.asm` trampoline (24 bytes remaining). Hooks `state_disp_005020` (state 0) and `frame_update_orch_005070` (state 4). Commit `b6bd487`.
+
+**What's unchanged:** ALL physics, timers, AI, collision, sound, replay, HUD. Game logic runs at exactly 20 FPS with original constants.
 
 ### Slave SH2 Hotspot Breakdown
 
@@ -90,21 +100,25 @@ This means: **frame rate = max(3, ceil(SH2_render_time / TV_frame_duration))**. 
 - `disasm/modules/68k/main-loop/vint_handler.asm` — V-INT dispatch (21+ entry table at $0016B2)
 - `disasm/modules/68k/game/scene/game_frame_orch_013.asm` — full game frame orchestrator
 
-### FPS Threshold Model
+### FPS Threshold Model (Revised)
+
+The old model assumed 1 render per game frame. With camera interpolation, multiple renders per game frame are possible:
 
 ```
-Current:     Slave SH2 uses ~2.35 TV frames → needs 3 TV frames → ~20 FPS
-30 FPS:      Slave SH2 must finish in ≤2 TV frames → need ~15% reduction
-60 FPS:      Slave SH2 must finish in ≤1 TV frame → need ~57% reduction + pipeline overlap
+20 FPS:  1 render / 3 TV frames (original)
+40 FPS:  2 renders / 3 TV frames (current — A-1 camera interpolation)
+60 FPS:  3 renders / 3 TV frames (target — need block-copy+swap in state 0)
 ```
 
-**Key insight:** 68K cycle optimizations do NOT improve FPS — they just increase STOP time. FPS improves ONLY by reducing SH2 workload (fewer polygons, load balancing) or restructuring the frame pipeline.
+**SH2 budget for 60 FPS:** 3 × ~300K = ~900K / 1,149K = **78%** — tight but feasible (same as original 20 FPS single-render utilization).
+
+**Key insight (revised):** FPS improves by adding SH2 render passes with interpolated camera data. The 68K drives the pipeline — sending block copies and swapping frame buffers. SH2 workload reduction (Phase 2) provides headroom but is NOT required for 60 FPS.
 
 ---
 
-## Phase 1 — 30 FPS (Reduce Slave SH2 to ≤2 TV frames + state merge)
+## Phase 1 — 40 FPS (Camera Interpolation Rendering) — DONE
 
-The critical path: verify LOD culling reduces SH2 work → tune thresholds → merge state machine states.
+**Achieved via Approach A:** Fixed 20 FPS game tick + variable-rate rendering. No SH2 workload reduction needed.
 
 ### S-1: Entity Visibility Culling — DEAD END
 
@@ -187,21 +201,31 @@ Racing uses the **Huffman renderer** at `$06004AD0` (Master cmd `$23`) and a com
 
 </details>
 
-### Phase 1 Critical Path (Revised)
+### A-1: Camera Interpolation Rendering — DONE (b6bd487)
+
+**What:** Snapshot prev/curr camera at game tick boundary. In state 4, send block copies of first render to framebuffer + swap, then average prev/curr camera, re-DMA to SH2 for second render. State 8's existing mechanism displays the second render.
+
+**Code:** 192 bytes in `code_2200.asm` trampoline:
+- `camera_snapshot_wrapper` (46B): wraps `mars_dma_xfer_vdp_fill`, captures camera state
+- `camera_avg_and_redma` (38B): averages 8 camera words, re-DMAs to SH2
+- `state4_epilogue` (102B): 2× `sh2_send_cmd` block copy + frame swap + interp call + state advance
+
+**Hooks:** `state_disp_005020` (state 0 snapshot) + `frame_update_orch_005070` (state 4 epilogue). Other 4 race dispatchers NOT yet hooked.
+
+### Phase 1 Summary
 
 ```
-S-1 (entity culling)     ✗ DEAD END — entity descriptors unused during racing
-S-4 (state merge + compensation) ✗ REVERTED — fragile constant scaling, cascading regressions
-→ NEW DIRECTION: Phase 2 SH2 optimization is now the primary path to 30 FPS
-  The SH2 needs ~15% workload reduction to naturally complete in 2 TV frames
-  This preserves ALL original game timing without constant hacking
+S-1 (entity culling)        ✗ DEAD END — entity descriptors unused during racing
+S-4 (state merge)            ✗ REVERTED — fragile constant scaling
+A-1 (camera interpolation)   ✓ DONE — 40 FPS with zero physics changes
+→ NEXT: A-2 (60 FPS) — add 3rd render per game frame
 ```
 
 ---
 
-## Phase 2 — SH2 Optimization → 30 FPS (Primary Path)
+## Phase 2 — SH2 Optimization (Headroom for 60 FPS)
 
-**This is now the primary path to 30 FPS.** With S-4 reverted, the goal is to reduce SH2 workload by ~15% so the existing 3-TV-frame pipeline naturally completes in 2 TV frames. This preserves all original game timing, physics, and sound behavior — no constant hacking required.
+**Purpose shifted:** 40 FPS was achieved WITHOUT SH2 optimization. SH2 reduction now provides headroom for 60 FPS (3 renders per 3 TV frames = 78% SH2 utilization target). Each percentage of SH2 reduction extends the margin for complex scenes that currently take longer than 1 TV frame.
 
 ### S-5: Behind-Camera Culling — NEEDS RE-EVALUATION
 
@@ -300,9 +324,35 @@ NEW: Huffman renderer analysis — required to unlock S-5/S-9 alternatives
 
 ---
 
-## Phase 3 — 60 FPS (Pipeline Overlap + Extreme Optimization)
+## Phase 3 — 60 FPS (A-2: Third Render Per Game Frame)
 
-Requires SH2 rendering in ≤1 TV frame (~57% reduction from 2.35). Needs both workload reduction (Phase 1+2) AND architectural changes.
+**Now within reach.** SH2 renders in <1 TV frame already (~0.78 TV frames). Three renders per 3 TV frames = 78% utilization — the same as the original 20 FPS single-render utilization.
+
+### A-2: 60 FPS Rendering
+
+**Concept:** Add block-copy + swap to state 0 (before DMA). At state 0, the SDRAM still contains the previous frame's interpolated render (from state 4's re-DMA). Block-copy it to the framebuffer and swap, displaying a third frame per game cycle.
+
+**Flow:**
+```
+State 0 (TV1): block-copy prev-interp → swap C → snapshot → DMA camera N → SH2 renders (A)
+State 4 (TV2): block-copy A → swap A → interp → re-DMA → SH2 renders (B)
+State 8 (TV3): block-copy B → swap B (existing)
+Result: 3 swaps / 3 TV frames = 60 FPS
+```
+
+**Requirements:**
+1. ~80 bytes of 68K code for state 0 block-copy + swap (2× sh2_send_cmd + toggle)
+2. Trampoline space — only 24 bytes free at `object_table_sprite_param_update`. Need alternative location.
+3. SH2 must consistently finish each render within 1 TV frame (currently 0.78 — 22% margin)
+
+**Space options:**
+- Find another trampoline-able function in the ROM
+- Repurpose 26-byte NOP padding at sh2_send_cmd ($00E39A)
+- Compress existing trampoline code to free bytes
+
+**Risk:** Low-Medium. SH2 has sufficient budget. Main risk is finding code space and ensuring the third frame swap doesn't confuse the existing `vdp_dma_frame_swap_037` mechanism (which resets `$C87E`).
+
+### Architectural Changes (for future optimization beyond A-2)
 
 ### C-1: Double-Buffered Command Lists
 

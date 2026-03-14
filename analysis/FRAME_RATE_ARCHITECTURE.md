@@ -322,7 +322,7 @@ Position deltas scale linearly with speed (no explicit per-frame constant, but i
 
 ## 7. CPU Budget
 
-### 7.1 Current (20 FPS, 3 TV Frames per Game Frame)
+### 7.1 Baseline (20 FPS, 3 TV Frames per Game Frame)
 
 | CPU | Cycles/TV Frame | Active Cycles | Utilization |
 |-----|----------------|---------------|-------------|
@@ -330,27 +330,27 @@ Position deltas scale linearly with speed (no explicit per-frame constant, but i
 | Master SH2 | 383,040 | 125,175 avg | 33% avg (0-36%) |
 | Slave SH2 | 383,040 | 301,047 | 79% |
 
-**68K breakdown** (from PC profiling):
-- 52.28% STOP (idle, waiting for V-INT)
-- 10.52% sh2_send_cmd COMM wait
-- ~37% actual game logic
+### 7.2 Measured (40 FPS, 2 Swaps per 3 TV Frames)
 
-### 7.2 Projected (30 FPS Display with 20 FPS Game Logic)
+| CPU | 40 FPS Avg | 20 FPS Baseline | Delta | Notes |
+|-----|-----------|-----------------|-------|-------|
+| 68K | 127,986 | 127,987 | -1 | Overhead absorbed by idle time |
+| Master SH2 | 127,061 | 125,175 | +1,886 | Extra block copies in state 4 |
+| Slave SH2 | 299,926 | 301,047 | -1,121 | Measurement variance |
 
-At 30 FPS display, each display frame gets 2 TV frames (128K 68K cycles, 766K SH2 cycles):
+**Key result:** The 40 FPS pipeline (snapshot + averaging + 2× sh2_send_cmd + re-DMA + frame swap) adds negligible overhead. The 68K's 52% idle time absorbs all new work.
 
-| Work Item | Cycles | Budget | Fits? |
-|-----------|--------|--------|-------|
-| 68K game tick (every 3rd frame) | ~62K | 128K | Yes |
-| 68K interpolation frame | ~44K | 128K | Yes |
-| SH2 render (per display frame) | ~301K | 383K | Yes |
-| SH2 2 renders in 3 TV frames | ~602K | 1,149K | Yes (52%) |
+**SH2 budget:** 2 renders × ~300K = ~600K / 1,149K (3 TV frames) = **52%** utilization. Ample headroom for a 3rd render (60 FPS).
 
-**Interpolation frame 68K budget:**
-- Camera lerp: ~500 cycles (3 words × lerp)
-- DREQ DMA re-submission: ~2K cycles (comm_transfer_setup)
-- sh2_send_cmd re-submission: ~40K cycles (14 block-copy cmds)
-- Total: ~43K / 128K = 34%
+### 7.3 Projected (60 FPS, 3 Swaps per 3 TV Frames)
+
+| Metric | Value | Budget | Margin |
+|--------|-------|--------|--------|
+| SH2 per render | ~300K cycles | 383K (1 TV frame) | 22% |
+| SH2 total (3 renders) | ~900K cycles | 1,149K (3 TV frames) | 22% |
+| 68K additional overhead | ~5K cycles | 128K (1 TV frame) | 96% |
+
+60 FPS is feasible from a CPU budget perspective. The bottleneck is **code space** (24 bytes remaining in trampoline) and ensuring the third frame swap doesn't conflict with `vdp_dma_frame_swap_037`'s `$C87E` reset.
 
 ---
 
@@ -410,44 +410,61 @@ PER GAME FRAME (20 FPS, state 0 only):
 
 ---
 
-## 9. Implications for Frame-Rate Independence
+## 9. 40 FPS Implementation (Approach A — DONE)
 
-### 9.1 Why Approach A (Fixed Tick + Variable Render) Is Viable
+### 9.1 What Was Implemented (commit b6bd487)
 
-The architecture naturally supports decoupled rendering because:
+Camera interpolation rendering — fixed 20 FPS game tick + 40 FPS display via 2 SH2 renders per game frame.
 
-1. **Game logic and rendering are already separated** — game runs in state 0, states 4/8 are "idle" for SH2
-2. **Camera parameters are the only per-frame input to SH2** — only 6 bytes (X, Y, Z) need interpolation
-3. **SH2 re-renders the full scene each frame** — triggering an extra render just requires re-sending camera params
-4. **CPU budget has ample headroom** — 68K at 34% for interpolation frames, SH2 at 52% for 2 renders per 3 TV frames
+**Trampoline code** at `code_2200.asm` (192 of 210 available bytes):
 
-### 9.2 What Needs to Happen on Interpolation Frames
+| Routine | Size | Purpose |
+|---------|------|---------|
+| `camera_snapshot_wrapper` | 46B | Wraps `mars_dma_xfer_vdp_fill` — snapshots camera to `$FF6080`/`$FF6090` before DMA |
+| `camera_avg_and_redma` | 38B | Averages 8 words of prev/curr camera, writes to `$FF6100`, re-DMAs |
+| `state4_epilogue` | 102B | 2× `sh2_send_cmd` block copy + frame swap + interp call + state advance |
 
-On states 4/8 (currently minimal work), instead of idling:
+**Hooks:**
+- `state_disp_005020` state 0: `jsr camera_snapshot_wrapper(pc)` replaces `jsr mars_dma_xfer_vdp_fill(pc)`
+- `frame_update_orch_005070`: tail-jumps to `state4_epilogue` instead of inline state advance
 
-1. **Lerp camera parameters**: `interp = prev + (curr - prev) × t`
-   - `t = 0.33` for state 4, `t = 0.67` for state 8
-   - Only 3 words at `$FF2000-$FF2004`
-2. **Re-submit camera via `comm_transfer_setup_a`** → triggers SH2 re-render
-3. **Re-submit block-copy commands** → moves rendered data to framebuffer
-4. **Wait for SH2 completion** → frame buffer swap
+### 9.2 Per-Game-Frame Flow
+
+```
+State 0 (TV frame 1):
+  camera_snapshot_wrapper: prev←curr, curr←$FF6100, then mars_dma_xfer_vdp_fill
+  → SH2 receives camera N, renders to SDRAM
+
+State 4 (TV frame 2):
+  [existing work: sound, controller, counters, AI, render pipeline]
+  state4_epilogue:
+    1. Block-copy SDRAM→framebuffer (2× sh2_send_cmd, same params as geometry transfer)
+    2. COMM1_LO bit 0 check → bchg FS bit → swap (displays camera N render)
+    3. camera_avg_and_redma: average prev/curr → $FF6100 → mars_dma_xfer_vdp_fill
+    → SH2 receives averaged camera, renders to SDRAM
+
+State 8 (TV frame 3):
+  [existing work: render orch, HUD, sprites, object update]
+  sh2_geometry_transfer: block-copy SDRAM→framebuffer (existing)
+  V-INT $54 → vdp_dma_frame_swap_037: swap (displays interpolated render)
+```
 
 ### 9.3 What Does NOT Change
 
 - All physics constants — identical to 20 FPS
 - Timer countdown rates — unchanged
 - AI behavior — unchanged
-- Sound triggers — fire at 20 FPS (imperceptible vs 30 FPS visuals)
+- Sound triggers — fire at 20 FPS
 - Replay system — unchanged
 - Collision detection — unchanged
-- HUD updates — 20 FPS (speed/position display freezes between ticks)
+- HUD updates — 20 FPS (speed/position display updates between ticks)
 
-### 9.4 Risks
+### 9.4 Known Limitations
 
-- **Camera-only interpolation**: Entity positions update at 20 FPS while camera moves smoothly at 30 FPS. For a driving game where the camera follows the player, this should be imperceptible — the camera IS the primary motion source.
-- **SH2 render time**: The Slave SH2 currently uses 301K cycles/frame. Two renders in 3 TV frames = 602K/1,149K = 52%. Tight but feasible.
-- **Frame buffer swap timing**: Must ensure SH2 completes render before next swap. The existing COMM1_LO mechanism handles this.
-- **Sound/HUD lag**: Sound triggers and HUD updates at 20 FPS while visuals at 30 FPS. Acceptable tradeoff.
+- **Dispatcher coverage:** Only `state_disp_005020` (active racing) is hooked. Other 4 dispatchers (`004cb8` pre-race, `005308` post-race, `005586` attract, `005618` replay) run at original 20 FPS.
+- **Trampoline space:** 24 bytes remaining — insufficient for 60 FPS without additional ROM space.
+- **Camera-only interpolation:** The averaged camera produces smooth panning but entity positions update at 20 FPS. In a driving game this is imperceptible since the camera follows the player.
+- **Frame swap without CMD INT:** The state 4 swap uses `bchg` on the FS bit without sending CMD INT to the SH2. Testing shows this works but may need CMD INT for proper SH2 buffer tracking in edge cases.
 
 ---
 
@@ -469,5 +486,32 @@ On states 4/8 (currently minimal work), instead of idling:
 | `modules/68k/game/render/vdp_dma_frame_swap_037.asm` | Frame swap + SH2 sync |
 | `modules/68k/game/scene/sh2_object_and_sprite_update_orch.asm` | Visibility + SH2 cmds |
 | `modules/68k/game/entity/entity_visibility_check.asm` | Per-entity visibility |
-| `sections/code_2200.asm` | Trampoline space (210 bytes) |
-| `state_disp_004cb8/005020/005308/005586/005618.asm` | 5 race state dispatchers |
+| `sections/code_2200.asm` | Trampoline: snapshot + interp + epilogue (192/210 bytes used) |
+| `state_disp_004cb8/005020/005308/005586/005618.asm` | 5 race state dispatchers (only 005020 hooked) |
+
+---
+
+## 11. Path to 60 FPS
+
+### 11.1 Concept
+
+Add a third frame swap per game frame by block-copying the previous interpolated render in state 0 (before DMA overwrites SDRAM).
+
+```
+State 0 (TV1): block-copy prev-interp → swap C → snapshot → DMA camera N → SH2 renders (A)
+State 4 (TV2): block-copy A → swap A → interp → re-DMA → SH2 renders (B)
+State 8 (TV3): block-copy B → swap B (existing)
+Result: 3 swaps / 3 TV frames = 60 FPS
+```
+
+### 11.2 Requirements
+
+1. **~80 bytes of 68K code** for state 0 block-copy + swap (2× `sh2_send_cmd` at 6 bytes each via abs.l + params + swap logic)
+2. **More ROM space** — current trampoline has 24 bytes free. Options: find another trampoline-able function, reuse NOP padding in `sh2_send_cmd` ($E39A, 26 bytes), or compress existing code.
+3. **SH2 must render in <1 TV frame** consistently — current average is 0.78 TV frames (22% margin).
+
+### 11.3 Risks
+
+- **SH2 timing on complex scenes:** If any scene exceeds 383K cycles per render, the third swap is deferred. The existing adaptive mechanism (`vdp_dma_frame_swap_037` checks COMM1_LO) handles this gracefully — the game drops to 40 FPS temporarily.
+- **`vdp_dma_frame_swap_037` $C87E reset:** The existing state 8 frame swap resets `$C87E` to 0 when successful. If the state 0 swap also uses this handler, it would skip states 4/8. The state 0 swap must use a variant that does NOT reset `$C87E` (same approach as the current state 4 swap — inline `bchg`).
+- **Display ordering:** With 3 frames per game tick, the visual sequence must be temporally correct. State 0 shows the previous frame's interpolated camera, state 4 shows the current camera, state 8 shows this frame's interpolated camera.

@@ -27,17 +27,34 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **Key files:** `disasm/sh2/expansion/vis_bitmask_handler.asm`, `disasm/modules/68k/game/render/object_table_sprite_param_update.asm`
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
 
-### S-4: Merge $C87E States 0+4 (Phase 1 — 30 FPS)
-**Status:** REVERTED (2026-03-14) — cascading regressions, constant scaling approach too fragile
+### A-1: Camera Interpolation Rendering (40 FPS)
+**Status:** DONE (2026-03-14, b6bd487)
 **Priority:** P1
+**What:** Decoupled display from game logic via camera interpolation. State 0 snapshots prev/curr camera. State 4 block-copies first render + swaps + interpolates camera + re-DMAs for second SH2 render. State 8's existing swap displays interpolated frame. Result: 2 swaps per 3 TV frames = 40 FPS display, 20 FPS game logic. Zero physics changes.
+**Profiling:** CPU impact negligible (68K unchanged, SH2 at 52% for 2 renders). 3600-frame autoplay verified.
+**Coverage note:** Only `state_disp_005020` (active racing) hooked. Other 4 race dispatchers (`004cb8`, `005308`, `005586`, `005618`) NOT yet hooked for camera snapshot.
+**Key files:** `disasm/sections/code_2200.asm`, `disasm/modules/68k/game/state/state_disp_005020.asm`, `disasm/modules/68k/game/scene/frame_update_orch_005070.asm`
+**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §A-1, [analysis/FRAME_RATE_ARCHITECTURE.md](analysis/FRAME_RATE_ARCHITECTURE.md)
+
+### A-2: 60 FPS Rendering (Third Frame Swap)
+**Status:** OPEN
+**Priority:** P1 — next step toward 60 FPS
+**Why:** Add block-copy + swap to state 0, displaying the previous frame's interpolated render before the new DMA. This gives 3 frame swaps per 3 TV frames = 60 FPS. SH2 budget: 3 × ~300K = 78% of 3 TV frames — same as original 20 FPS utilization.
+**Blocker:** Trampoline space — only 24 bytes free. Need ~80 bytes for state 0 block-copy + swap code. Must find additional ROM space (second trampoline or NOP padding reuse).
+**Key files:** `disasm/sections/code_2200.asm`, `disasm/modules/68k/game/state/state_disp_005020.asm`
+**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §A-2
+
+### S-4: Merge $C87E States 0+4 (Phase 1 — 30 FPS)
+**Status:** REVERTED (2026-03-14) — superseded by A-1 camera interpolation
+**Priority:** P1 (historical)
 **Why:** Skip state 4 in race dispatchers to achieve 30 FPS. Mechanically worked, but required compensating timing constants across 20+ files (S-4b/S-4c). After 3 sessions of regression chasing (broken collision physics, missing checkpoint music, attract mode desync, menu slowdowns, frame stuttering), the approach was abandoned.
-**Lesson:** 30 FPS should come from SH2 workload reduction (~15%), not state machine hacking. The game's timing is too deeply coupled for constant patching.
+**Lesson:** Decoupling display from game logic (Approach A) succeeded where constant patching (Approach B) failed.
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-4
 
-### S-6: SH2 coord_transform Batching (NEW PRIMARY PATH)
+### S-6: SH2 coord_transform Batching
 **Status:** OPEN
-**Priority:** P1 — primary path to 30 FPS via SH2 workload reduction
-**Why:** `coord_transform` is 17% of Slave SH2 frame time. Batching 4 per-vertex calls into 1 eliminates redundant base value loads and 3 BSR/RTS pairs. Estimated ~6% SH2 reduction.
+**Priority:** P2 — SH2 headroom for 60 FPS stability
+**Why:** `coord_transform` is 17% of Slave SH2 frame time. Batching 4 per-vertex calls into 1 eliminates redundant base value loads. Estimated ~6% SH2 reduction. No longer needed for FPS target (40 FPS achieved without SH2 optimization), but provides margin for 60 FPS on complex scenes.
 **Key files:** `disasm/sh2/3d_engine/coord_transform.asm`, quad_batch callers
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-6
 

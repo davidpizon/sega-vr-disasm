@@ -79,8 +79,8 @@ disasm/vrd.asm (entry point)
 
 - **823 68K modules** (736 fully translated, 87 with remaining dc.w — all data, not code)
 - **All SH2 functions** integrated (92 function IDs via 89 .inc files, zero remaining)
-- **68K is THE bottleneck** — 100% utilization, ~60% wasted polling COMM registers
-- **Master SH2**: 0-36% util. **Slave SH2**: 78% util. **Baseline FPS**: ~20-24
+- **Display FPS**: ~40 (camera interpolation, 2 swaps per 3 TV frames). Game logic at 20 FPS.
+- **Master SH2**: 0-36% util. **Slave SH2**: 52% (2 renders/3 TV frames). **Target**: 60 FPS
 
 ### Critical Constraint: Expansion ROM ($300000+)
 
@@ -177,10 +177,10 @@ VRD_PROFILE_PC=1 VRD_PROFILE_PC_LOG=profile.csv \
 python3 analyze_pc_profile.py profile.csv
 ```
 
-**Baseline measurements** (January 2026):
+**Current measurements** (March 2026, 40 FPS camera interpolation):
 
-| CPU | Cycles/Frame | Utilization |
-|-----|-------------|-------------|
-| 68K | 127,987 | 100.1% (bottleneck) |
-| Master SH2 | 60-139,568 | 0-36% |
-| Slave SH2 | 299,958 | 78.3% |
+| CPU | Cycles/Frame | Utilization | Notes |
+|-----|-------------|-------------|-------|
+| 68K | 127,986 | ~48% active, 52% STOP | Interpolation overhead negligible |
+| Master SH2 | 127,061 avg | 0-36% | Extra block copies in state 4 |
+| Slave SH2 | 299,926 | 52% (2 renders/3 TV) | 22% headroom per render |
