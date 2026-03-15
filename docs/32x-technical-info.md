@@ -37,9 +37,9 @@ The following modifications are necessary when a Mega Drive 32 Mbit ROM board is
 
 **Work Procedure:**
 
-1. Cut between the pattern of the IC13 no. 7 pin and the through-hole below the pin
+1. Cut between the pattern of the IC13 no. 1 pin and the through-hole below the pin
 2. Cut between the pattern of the IC14 no. 1 pin and the through-hole to the left of the pin
-3. Cut the trace pattern of the IC15 no. 4 and no. 6 pins
+3. Cut the trace pattern of the IC15 no. 5 and no. 6 pins
 4. Wire (connect) IC13 no. 1 pin, IC14 no. 1 pin, and IC15 no. 4 pin
 5. Wire (connect) the IC15 no. 5 and no. 6 pins to B16 of the card edge
 
@@ -58,7 +58,7 @@ The following modifications are necessary when a Mega Drive 32 Mbit ROM board is
 
 The 32X target does not operate unless:
 - SH2 is cut 2.3 or greater
-- OT version is 2.1 or greater
+- IPI version is 1.21 or greater
 
 ### 6. VRES and RV Bit Issue
 
@@ -153,7 +153,7 @@ The following address data is not normally read when RV=1:
 
 ### 14. VDP Shift Bit Limitation
 
-In the 32X VDP, the shift bit becomes invalid when the lower byte of the base address set in the line table is `$FE`.
+In the 32X VDP, the shift bit becomes invalid when the lower byte of the base address set in the line table is `$FF`.
 
 **Solution:** Make sure the lower byte in the table is not `$FF` when using shift.
 
@@ -181,7 +181,7 @@ Target version 2.1 performs:
 
 **CRITICAL:** 32X development board starts up from 68000 side boot ROM when power is switched on.
 
-As a result, when power is on, write against cartridge connector is not allowed.
+As a result, when power is on, R/W against cartridge connector is not allowed.
 
 **Solution:** To avert this, make sure to write 1 using 1 byte to `$A14100`. GENESIS OS will be released, and the normal access will be allowed.
 
@@ -194,8 +194,9 @@ Specifically, make sure the Tacc and Tce catalog values are 120 nsec (MAX) or le
 **Major Makers' Model Number Examples:**
 
 - **Toshiba 16M:**
-  - 16-bit bus: TC571600D-120
-  - 8-bit bus: TC574200D-120
+  - 16-bit bus: TC5716200D-120
+- **Toshiba 4M:**
+  - 16-bit bus: TC574200D-120
 - **NEC 4M:**
   - 8-bit bus: uPD27C4001D-120
 
@@ -268,7 +269,7 @@ With MegaDrive, there would be no problems. However, 32X compared to 68000 has a
 
 1. **PWM registers must be accessed by word from SH2** (Item 19)
 2. **FRAM requires RV=1 for access** (Item 7)
-3. **VDP shift bit invalid when line table lower byte is $FE** (Item 14)
+3. **VDP shift bit invalid when line table lower byte is $FF** (Item 14)
 4. **ROM read skips 12 bytes when RV=1** (Item 12)
 
 ### Priority 3 - Development

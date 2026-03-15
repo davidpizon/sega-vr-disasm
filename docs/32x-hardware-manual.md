@@ -42,7 +42,7 @@ Explains the main CPU features and its communication with the MEGA Drive.
 ### Chapter 4: Accessing the 32X Block
 Explains registers and buffers that can be accessed from each CPU, the method of taking access authority, and access time.
 
-### Chapter 5: Miscellaneous
+### Chapter 5: Other
 
 #### Boot ROM
 Explains operations from when the power is turned on until executing the application.
@@ -257,12 +257,12 @@ The 32X has two SH2 chips mounted to a common bus. Memory maps of the two chips 
 | 0000 4100h | 2000 4100h | VDP REG |
 | 0000 4200h | 2000 4200h | Color Palette |
 | 0000 4400h | 2000 4400h | - |
-| 0200 0000h | 2200 0000h | SDRAM |
+| 0200 0000h | 2200 0000h | ROM Cartridge |
 | 0240 0000h | 2240 0000h | - |
-| 0400 0000h | 2400 0000h | ROM Cartridge |
-| 0402 0000h | 2402 0000h | Frame Buffer |
-| 0404 0000h | 2404 0000h | Overwrite Image |
-| 0600 0000h | 2600 0000h | - |
+| 0400 0000h | 2400 0000h | Frame Buffer |
+| 0402 0000h | 2402 0000h | Overwrite Image |
+| 0404 0000h | 2404 0000h | - |
+| 0600 0000h | 2600 0000h | SDRAM |
 | 0604 0000h | 2604 0000h | - |
 | 0800 0000h | 2800 0000h | - |
 
@@ -350,10 +350,10 @@ The frame buffer and overwrite image have 4-word write FIFO and can write in 3 c
 
 **Address:** A1 5100h
 
-| Bit | 15-8 | 7 | 6 | 5-2 | 1 | 0 |
-|-----|------|---|---|-----|---|---|
-| Field | - | FM | - | - | REN/RES | ADEN |
-| R/W | Read only | R/W | - | - | R/W | R/W |
+| Bit | 15 | 14-8 | 7 | 6-2 | 1 | 0 |
+|-----|-----|------|---|-----|---|---|
+| Field | FM | - | REN | - | RES | ADEN |
+| R/W | R/W | Read only | R/W | - | R/W | R/W |
 
 **FM: VDP Access Authorization**
 - 0: MD (Initial value)
@@ -414,26 +414,26 @@ Both are automatically cleared if SH2 does not interrupt clear.
 
 **Address:** A1 5106h
 
-| Bit | 15-3 | 2 | 1 | 0 |
-|-----|------|---|---|---|
-| Field | - | FULL | RV | 68S |
-| R/W | - | Read only | R/W | R/W |
+| Bit | 15-8 | 7 | 6-3 | 2 | 1 | 0 |
+|-----|------|---|-----|---|---|---|
+| Field | - | FULL | - | 68S | 0 | RV |
+| R/W | - | Read only | - | R/W | - | R/W |
 
 **FULL: DMA FIFO Full**
 - 0: Can write
 - 1: Cannot write
-
-**RV: ROM to VRAM DMA**
-- 0: NO OPERATION (initial value)
-- 1: DMA Start Allowed
-
-The SH2 side cannot access the ROM when RV = 1. Waits until value becomes 0 (RV = 0) before accessing.
 
 **68S: Mode**
 - 0: No Operation
 - 1: CPU Write (68K writes data in FIFO)
 
 The internal system starts operation when 68S is 1. Writing 0 force-ends the operation. It is automatically set to 0 after DMA ends.
+
+**RV: ROM to VRAM DMA**
+- 0: NO OPERATION (initial value)
+- 1: DMA Start Allowed
+
+The SH2 side cannot access the ROM when RV = 1. Waits until value becomes 0 (RV = 0) before accessing.
 
 ### 68K to SH DREQ Source Address Register (Access: Word)
 
@@ -451,10 +451,10 @@ Sets the SH2 side (SDRAM) address. The DREQ circuit does not use this data. When
 
 **Address:** A1 5110h
 
-| Bit | 15 | 14-2 | 1-0 |
-|-----|-----|------|-----|
-| Field | 0 | Length | 0 |
-| R/W | - | R/W | - |
+| Bit | 15-2 | 1-0 |
+|-----|------|-----|
+| Field | Length | 0 |
+| R/W | R/W | - |
 
 Sets the number of data items (unit: word) to be sent to SH2 side. The value to be set is in 4-word units. Low order 2 bits write is ignored (00 fixed). Be sure to set this register for CPU WRITE. At each transfer, this register is decremented and when it becomes 0, the DREQ operation ends. Transfer is done 65,536 times when 0 is set. Read time reads the actual count value.
 
@@ -492,20 +492,21 @@ This is an 8-word bi-directional register. Read/write is possible from the MEGA 
 | Bit | 15-12 | 11-8 | 7 | 6-4 | 3-0 |
 |-----|-------|------|---|-----|-----|
 | Field | - | TM3-0 | RTP | - | RMD0, RMD1, LMD0, LMD1 |
-| R/W | Read only | R/W | R/W | Read only | R/W |
+| R/W | - | Read only | Read only | - | R/W |
 
-**TM3-0: PWM timer interrupt interval**
+**TM3-0: PWM timer interrupt interval** (Read only from MD side; set from SH2 side)
 
-**RTP: DREQ1 occurrence enable (SH2 side only)**
+**RTP: DREQ1 occurrence enable (SH2 side only)** (Read only from MD side)
 - 0: OFF (initial value)
 - 1: ON
 
 **Output Configuration:**
 
-| LMD0 | LMD1 | OUT | RMD0 | RMD1 | OUT |
+| RMD0 | RMD1 | OUT | LMD0 | LMD1 | OUT |
 |------|------|-----|------|------|-----|
 | 0 | 0 | OFF | 0 | 0 | OFF |
 | 0 | 1 | R | 0 | 1 | L |
+| 1 | 0 | L | 1 | 0 | R |
 | 1 | 1 | Not allowed | 1 | 1 | Not allowed |
 
 Both cannot be set to L ch or R ch.
@@ -566,7 +567,7 @@ See explanation of L ch pulse width register. If writing to this register, the s
 | Bit | 15 | 14-10 | 9 | 8 | 7 | 6-4 | 3 | 2 | 1 | 0 |
 |-----|-----|-------|---|---|---|-----|---|---|---|---|
 | Field | FM | - | ADEN | CART | HEN | - | V | H | CMD | PWM |
-| R/W | Read only | - | R/W | Read only | R/W | - | R/W | R/W | R/W | R/W |
+| R/W | R/W | - | R/W | Read only | R/W | - | R/W | R/W | R/W | R/W |
 
 **FM: VDP Access Authorization**
 - 0: MEGA DRIVE (initial value)
@@ -907,10 +908,10 @@ Use with system (Boot ROM). Access to this register from the application is proh
 
 **Address:** 2000 4006h
 
-| Bit | 15 | 14 | 13-2 | 1 | 0 |
-|-----|-----|-----|------|---|---|
-| Field | FULL | EMPTY | - | 68S | RV |
-| R/W | Read only | Read only | - | Read only | Read only |
+| Bit | 15 | 14 | 13-3 | 2 | 1 | 0 |
+|-----|-----|-----|------|---|---|---|
+| Field | FULL | EMPTY | - | 68S | 0 | RV |
+| R/W | Read only | Read only | - | Read only | - | Read only |
 
 **FULL: Frame Buffer, Write Cache Full**
 - 0: Space
@@ -1033,7 +1034,7 @@ Switching is always allowed, but is valid from the next line.
 | Bit | 15 | 14 | 13 | 12-2 | 1 | 0 |
 |-----|-----|-----|-----|------|---|---|
 | Field | VBLK | HBLK | PEN | - | FEN | FS |
-| R/W | Read only | Read only | Read only | - | R/W | R/W |
+| R/W | Read only | Read only | Read only | - | Read only | R/W |
 
 **VBLK: V Blank**
 - 0: During display period
@@ -1049,7 +1050,7 @@ Switching is always allowed, but is valid from the next line.
 
 **FEN: Frame Buffer Authorization**
 - 0: Access approved
-- 1: Access denied
+- 1: Access denied (FILL in progress)
 
 **FS: Frame Buffer Swap**
 - 0: Transfers DRAM0 to VDP side (initial value)
@@ -1086,7 +1087,7 @@ Switching is allowed at any time, but is valid from the next line.
 **MD Side:** A1 5184h
 **SH Side:** 2000 4104h
 
-Word length when filling DRAM (frame buffer). To set this value, set the value for the to-be-filled word length (0-255).
+Word length when filling DRAM (frame buffer). To set this value, set the value for the to-be-filled word length - 1 (0-255).
 
 **Note:** The Auto Fill function will be explained later.
 
@@ -1095,12 +1096,12 @@ Word length when filling DRAM (frame buffer). To set this value, set the value f
 **MD Side:** A1 5186h
 **SH Side:** 2000 4106h
 
-| Bit | 16 | 15-9 | 8-1 |
+| Bit | 15 | 14-8 | 7-0 |
 |-----|-----|------|-----|
 | Field | A16 | A15-A9 | A8-A1 |
 | R/W | R/W | R/W | R/W |
 
-Sets the start address of the area to be filled. A16-A9 remains as fixed, but A8-A1 are incremented at each Fill.
+Sets the start address of the area to be filled. A16-A9 remain as fixed, but A8-A1 are incremented at each Fill.
 
 ### Auto Fill Data Register (Access: Word)
 
@@ -1311,15 +1312,15 @@ There are five registers within the SYS REG for controlling PWM of the 32X (see 
 
 *[Document continues but was truncated in the original message]*
 
-## Chapter 5: Miscellaneous
+## Chapter 5: Other
 
-### 1.13. Boot ROM
+### 5.1. Boot ROM
 
-The Boot ROM is an SH2 execution object that is loaded in 32X as ROM, and is different in content with respect to the master CPU and slave CPU. SH2 itself sleeps until activated by the Mega Drive side initial program. After the Boot ROM is reactivated, security (see 1.14 Security) is executed by the master CPU; and if OK, the Initial program is executed after the initial data (application program) is loaded from the cartridge to SDRAM.
+The Boot ROM is an SH2 execution object that is loaded in 32X as ROM, and is different in content with respect to the master CPU and slave CPU. SH2 itself sleeps until activated by the Mega Drive side initial program. After the Boot ROM is reactivated, security (see 5.2 Security) is executed by the master CPU; and if OK, the Initial program is executed after the initial data (application program) is loaded from the cartridge to SDRAM.
 
 #### Initial Data Load
 
-Address 3C0h to 3EDh (3F0h of the ROM cartridge) is called the user header. The user header contains parameters of the initial data load given by the format shown below:
+Address 3C0h to 3EDh of the ROM cartridge is called the user header. The user header contains parameters of the initial data load given by the format shown below:
 
 **MARS User Header ($00 03C0)**
 
@@ -1343,7 +1344,7 @@ The source address is the byte address in which the ROM cartridge load is 0. The
 
 #### Mega Drive and SH2 Synchronization
 
-The Boot ROM flow chart shows the boot process for both Master and Slave SH2. The "comm 0, 4, 8" reference refers to communication ports on the 32X. Immediately before an application starts, SH2 master writes "M_OK" (ASCII code 4 bytes) and SH2 slave writes "S_OK" to the communication port. The Mega Drive side executes the initial program (See 1.14 Security) at this time. To be able to synchronize the Mega Drive and SH2 with the application, these must be cleared when moving the Mega Drive side to the application. The SH2 side waits until it is cleared.
+The Boot ROM flow chart shows the boot process for both Master and Slave SH2. The "comm 0, 4, 8" reference refers to communication ports on the 32X. Immediately before an application starts, SH2 master writes "M_OK" (ASCII code 4 bytes) and SH2 slave writes "S_OK" to the communication port. The Mega Drive side executes the initial program (See 5.2 Security) at this time. To be able to synchronize the Mega Drive and SH2 with the application, these must be cleared when moving the Mega Drive side to the application. The SH2 side waits until it is cleared.
 
 **Boot ROM Flow (Master):**
 
@@ -1355,7 +1356,7 @@ The Boot ROM flow chart shows the boot process for both Master and Slave SH2. Th
 6. Custom Standby
 7. sleep
 8. Custom Active
-9. Custom Clear
+9. Cache Clear
 10. Cache ON
 11. SDRAM Test
     - If NG: "SDER" → comm0
@@ -1372,17 +1373,18 @@ The Boot ROM flow chart shows the boot process for both Master and Slave SH2. Th
 **Boot ROM Flow (Slave):**
 
 1. General Purpose Register Initialization
-2. Custom Clear
-3. Cache ON
-4. sleep
-5. Wait for cartridge exists
-6. Wait for comm0 = "CD_*" OR comm0 = "M_OK"
-7. If Y: Check SUM → comm8
-8. Wait for comm0 = "M_OK"
-9. "M_OK" → comm0
-10. Application Start
+2. Bus State Controller Initialization
+3. sleep
+4. Cache Clear
+5. Cache ON
+6. Wait for cartridge exists
+7. Wait for comm0 = "CD_*" OR comm0 = "M_OK"
+8. If Y: Check SUM → comm8
+9. Wait for comm0 = "M_OK"
+10. "S_OK" → comm4
+11. Application Start
 
-### 1.14. Security
+### 5.2. Security
 
 #### Initial Program
 
@@ -1439,7 +1441,7 @@ The initial program (icd_mars.prg) provides the necessary initialization sequenc
 ---
 
 
-### 1.15. Restrictions
+### 5.3. Restrictions
 
 #### DMA Restrictions
 
@@ -1477,7 +1479,7 @@ In addition, the following conditions exist:
 - DMA Destination Address Register 0 (FFFF FF84h) → optional
 - DMA Transfer Count Register 0 (FFFF FF88h) → same value as DREQ Length Register (2000 4010h)
 - DMA Channel Control Register 0 (FFFF FF8Ch) → 0100 0100 1110 0XXXb (fixed except for X)
-- DMA Request / Response Select Control Register 0 (FFF FE71h) → 00h fixed
+- DMA Request / Response Select Control Register 0 (FFFF FE71h) → 00h fixed
 - DMA Operation Register (FFFF FFB0h) → optional
 
 **Transfer from memory to PWM FIFO (channel 1, external request):**
@@ -1486,7 +1488,7 @@ In addition, the following conditions exist:
 - DMA Destination Address Register 1 (FFFF FF94h) → 2000 4034h ~ 2000 4038h
 - DMA Transfer Count Register 1 (FFFF FF98h) → optional
 - DMA Channel Control Register 1 (FFFF FF9Ch) → 00XX 0100 1110 0XXXb (fixed except for X) or 00XX 1000 1110 0XXXb (fixed except for X)
-- DMA Request / Response Select Control Register 1 (FFF FE72h) → 00h fixed
+- DMA Request / Response Select Control Register 1 (FFFF FE72h) → 00h fixed
 - DMA Operation Register (FFFF FFB0h) → optional
 
 **Transfer from memory to memory (channels 0, 1):**
@@ -1515,7 +1517,7 @@ The following restrictions occur when using two or more of the following interru
    |----------|-------|
    | Timer interrupt enable register (TIER) | 01h |
    | Output compare register A (OCRA) | 0002h |
-   | Free run timer control/status register (FCTST) | 01h |
+   | Free run timer control/status register (FTCSR) | 01h |
    | Timer control register (TOCR) | E2h |
 
 3. **Shared Interrupt Vectors**: External interrupts and the built-in peripheral module interrupt jump destination vector may be mis-recognized. Except for the Non-Maskable Interrupt (NMI) and user brake, interrupt vectors should be set so that they all call the same process routine. At the beginning of this process routine, individual process routines should be called by deciding and branching the SH2 status register values. When the internal peripheral module is assigned the same level as the external interrupt, check the individual interrupt factor flags by the software and find which interrupt occurred.
