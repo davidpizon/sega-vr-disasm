@@ -31,25 +31,25 @@
 ; FIXED: Moved counters from COMM4/COMM5/COMM6 to dedicated RAM to avoid conflicts
 ;        Original game uses COMM4-COMM6 for command protocol
 ;
-; MEMORY LAYOUT:
+; MEMORY LAYOUT (status as of March 2026):
 ;   0x300000-0x300027  Padding (40 bytes)
-;   0x300028-0x30003F  handler_frame_sync (22 bytes)
-;   0x300050-0x30007B  master_dispatch_hook (44 bytes)
-;   0x300100-0x30015F  vertex_transform_optimized (96 bytes)
-;   0x300200-0x30026F  slave_work_wrapper_v2 (112 bytes, updated for RAM counters)
-;   0x300280-0x3002AB  slave_test_func (32 bytes, reduced - counter removed)
-;   0x300300-0x300325  vertex_transform_original_relocated (36 bytes)
-;   0x300400-0x300450  shadow_path_wrapper (~80 bytes, added per-call barrier)
-;   0x300500-0x300537  batch_copy_handler (~56 bytes)
-;   0x300600-0x30067F  cmd27_queue_drain (128 bytes)
-;   0x300700-0x30073F  slave_comm7_idle_check (64 bytes, COMM7 doorbell + dual drain)
-;   --- Phase 1 allocations (reserved) ---
-;   0x300800-0x300BFF  cmdint_handler (Master SH2 CMDINT ISR, 1KB reserved)
-;   0x300C00-0x300FFF  queue_processor (ring buffer drain loop, 1KB reserved)
-;   --- Track 1 Phase 3: General command async ---
-;   0x301000-0x3010EF  general_queue_drain (240 bytes, COMM protocol replay)
-;   0x3010F0-0x30119F  cmd22_single_shot (176 bytes, longword copy + inline COMM cleanup)
-;   0x3011A0-0x3011DF  vis_bitmask_handler (64 bytes, Stage 1 descriptor patcher)
+;   0x300028-0x30003F  handler_frame_sync (22 bytes)           — DORMANT (B-006 reverted)
+;   0x300050-0x30007B  master_dispatch_hook (44 bytes)         — DORMANT (B-006 reverted)
+;   0x300100-0x30015F  vertex_transform_optimized (96 bytes)   — DORMANT (B-006 reverted)
+;   0x300200-0x30026F  slave_work_wrapper_v2 (112 bytes)       — DORMANT (B-006 reverted)
+;   0x300280-0x3002AB  slave_test_func (32 bytes)              — DORMANT (B-006 reverted)
+;   0x300300-0x300325  vertex_transform_original_relocated      — DORMANT (B-006 reverted)
+;   0x300400-0x300450  shadow_path_wrapper (~80 bytes)         — DORMANT (B-006 reverted)
+;   0x300500-0x300537  cmd25_single_shot (~56 bytes)           — ACTIVE  (B-005, JT $020814)
+;   0x300600-0x30067F  cmd27_queue_drain (128 bytes)           — DORMANT (superseded by inline drain at $020608)
+;   0x300700-0x30073F  slave_comm7_idle_check (64 bytes)       — ACTIVE  (B-003, trampoline $020608)
+;   --- Phase 1 allocations ---
+;   0x300800-0x300BFF  cmdint_handler (1KB reserved)           — RESERVED (never activated)
+;   0x300C00-0x300FFF  queue_processor (1KB reserved)          — RESERVED (never activated)
+;   --- Track 1 Phase 3 ---
+;   0x301000-0x3010EF  general_queue_drain (240 bytes)         — DORMANT (Track 1 Phase 3, deactivated)
+;   0x3010F0-0x30119F  cmd22_single_shot (176 bytes)           — ACTIVE  (B-004, JT $020808)
+;   0x3011A0-0x3011DF  vis_bitmask_handler (64 bytes)          — DORMANT (S-1c reverted, JT restored)
 ;   0x3011E0-0x3FFFFF  Free space (remaining ~1019KB)
 ;
 ; Shared Data Structures (cache-through SDRAM, NOT in expansion ROM):
@@ -66,10 +66,10 @@
         dcb.b   $28, $FF
 
 ; ============================================================================
-; FRAME SYNC HANDLER: 0x300028 (EVEN-ALIGNED for SH2 instruction fetch)
+; FRAME SYNC HANDLER: 0x300028 — STATUS: DORMANT (B-006 reverted)
 ; ============================================================================
 ; Simple handler that increments COMM4 and returns.
-; NOTE: Phase 16 dispatch will be added later with hook modifications.
+; Never triggered — dispatch hook that called this was reverted.
 ;
 ; See: disasm/sh2/expansion/handler_frame_sync.asm for source
 ;
@@ -84,11 +84,11 @@ handler_frame_sync:
         dcb.b   ($300050 - *), $FF
 
 ; ============================================================================
-; MASTER DISPATCH HOOK: 0x300050 (SH2 address: 0x02300050)
+; MASTER DISPATCH HOOK: 0x300050 — STATUS: DORMANT (B-006 reverted)
 ; ============================================================================
-; Called by Master SH2 when dispatching a command from 68K.
-; Writes COMM7=cmd for all commands EXCEPT 0x16 (vertex transform).
-; For cmd 0x16, the vertex_transform trampoline handles signaling AFTER params are ready.
+; Was: Called by Master SH2 when dispatching a command from 68K.
+; Wrote COMM7=cmd for all commands EXCEPT 0x16 (vertex transform).
+; Reverted due to COMM7 namespace collision (game cmd 0x27 = queue drain signal).
 ;
 ; Entry: R0 = command value (1-255)
 ; Preserved: R4 (context), R8 (COMM0 addr)
@@ -107,7 +107,7 @@ master_dispatch_hook:
         dcb.b   ($300100 - *), $FF
 
 ; ============================================================================
-; vertex_transform_optimized: Coordinate Transform + Cull (with coord_transform inlined)
+; vertex_transform_optimized — STATUS: DORMANT (B-006 reverted)
 ; Entry point: 0x300100 (SH2 address: 0x02300100) - 4-BYTE ALIGNED
 ; ============================================================================
 vertex_transform_optimized:
@@ -121,9 +121,9 @@ vertex_transform_optimized:
         dcb.b   ($300200 - *), $FF
 
 ; ============================================================================
-; SLAVE WORK WRAPPER V2: 0x300200 (SH2 address: 0x02300200)
+; SLAVE WORK WRAPPER V2: 0x300200 — STATUS: DORMANT (B-006 reverted)
 ; ============================================================================
-; Slave SH2 main loop - polls COMM7 for work signals from Master/68K.
+; Was: Slave SH2 main loop - polls COMM7 for work signals from Master/68K.
 ; Dispatches based on COMM7 value:
 ;   0x01 = Frame sync (increment COMM4)
 ;   0x16 = Vertex transform (calls slave_test_func, increments COMM5)
@@ -148,7 +148,7 @@ slave_work_wrapper:
         dcb.b   ($300280 - *), $FF
 
 ; ============================================================================
-; SLAVE TEST FUNCTION: 0x300280 (SH2 address: 0x02300280)
+; SLAVE TEST FUNCTION: 0x300280 — STATUS: DORMANT (B-006 reverted)
 ; ============================================================================
 ; Reads parameters from shared memory at 0x2203E000, then calls vertex_transform_optimized.
 ; Adds 100 to COMM5 on successful return.
@@ -165,9 +165,9 @@ slave_test_func:
         include "sh2/generated/slave_test_func.inc"
 
 ; ============================================================================
-; ORIGINAL vertex_transform (RELOCATED FOR SHADOW PATH — FIXED)
+; ORIGINAL vertex_transform — STATUS: DORMANT (B-006 reverted)
 ; ============================================================================
-; Relocated from ROM $0234C8 to enable shadow path instrumentation.
+; Was: Relocated from ROM $0234C8 for shadow path instrumentation.
 ; FIXED: Replaced PC-relative BSR with absolute MOV.L+JSR because the
 ; original BSR targets (coord_transform at $023368, nested at $02350A) are in
 ; main ROM, unreachable by BSR from expansion ROM.
@@ -205,9 +205,9 @@ vertex_transform_original_relocated:
         dc.w    $350A        ; $300332  Literal: nested func = 0x0202350A (low)
 
 ; ============================================================================
-; SHADOW PATH WRAPPER: 0x300400 (SH2: 0x02300400)
+; SHADOW PATH WRAPPER: 0x300400 — STATUS: DORMANT (B-006 reverted)
 ; ============================================================================
-; Full instrumentation for shadow path (Option 3).
+; Was: Full instrumentation for shadow path (Option 3).
 ; Called from vertex_transform jump at $0234C8.
 ;
 ; Increments COMM6 (Master call counter), signals Slave via COMM7,
@@ -226,7 +226,7 @@ shadow_path_wrapper:
         include "sh2/generated/shadow_path_wrapper.inc"
 
 ; ============================================================================
-; CMD25 SINGLE-SHOT HANDLER: 0x300500 (SH2 address: 0x02300500)
+; CMD25 SINGLE-SHOT HANDLER: 0x300500 — STATUS: ACTIVE (B-005, JT $020814)
 ; ============================================================================
 ; B-005: Single-shot decompression handler for cmd $25.
 ; Replaces the 3-phase COMM6 handshake protocol with single-shot dispatch.
@@ -255,9 +255,9 @@ cmd25_single_shot:
         dcb.b   ($300600 - *), $FF
 
 ; ============================================================================
-; CMD27 QUEUE DRAIN: 0x300600 (SH2 address: 0x02300600)
+; CMD27 QUEUE DRAIN: 0x300600 — STATUS: DORMANT (superseded by inline drain at $020608)
 ; ============================================================================
-; Async queue processor for cmd $27. Called by slave_work_wrapper when
+; Was: Async queue processor for cmd $27. Called by slave_work_wrapper when
 ; COMM7 = $27 (doorbell signal from 68K).
 ;
 ; Drains all queued cmd $27 entries from 68K Work RAM at $FFFB00.
@@ -277,7 +277,7 @@ cmd27_queue_drain:
         include "sh2/generated/cmd27_queue_drain.inc"
 
 ; ============================================================================
-; SLAVE COMM7 IDLE CHECK: 0x300700 (SH2 address: 0x02300700)
+; SLAVE COMM7 IDLE CHECK: 0x300700 — STATUS: ACTIVE (B-003, trampoline $020608)
 ; ============================================================================
 ; Replaces Slave's 64-NOP delay loop with COMM7 doorbell check.
 ; When COMM7 = $0027: clears COMM7, calls cmd27_queue_drain, returns to
@@ -296,28 +296,27 @@ slave_comm7_idle_check:
 ; Pad from end of slave_comm7_idle_check to Phase 1 allocation at 0x300800
         dcb.b   ($300800 - *), $FF
 
-; --- Phase 1: Master SH2 CMDINT Handler (at 0x300800) ---
+; --- Phase 1: Master SH2 CMDINT Handler (at 0x300800) — STATUS: RESERVED ---
 ; SH2 address: 0x02300800
 ; CMDINT ISR that processes ring buffer entries from SDRAM.
-; See: disasm/sh2/expansion/cmdint_handler.asm for source
+; Never activated. See: disasm/sh2/expansion/cmdint_handler.asm for source
 cmdint_handler:
         include "sh2/generated/cmdint_handler.inc"
 
 ; --- Pad to queue_processor at 0x300C00 ---
         dcb.b   ($C00 - $900), $FF      ; Pad from ~$900 to $C00
 
-; --- Phase 1: Queue Processor (at 0x300C00) ---
+; --- Phase 1: Queue Processor (at 0x300C00) — STATUS: RESERVED ---
 ; SH2 address: 0x02300C00
 ; Ring buffer drain loop called by CMDINT handler.
-; Processes entries: [cmd_id, param1, param2, param3] × 16-bit words
-; See: disasm/sh2/expansion/queue_processor.asm for source
+; Never activated. See: disasm/sh2/expansion/queue_processor.asm for source
 queue_processor:
         include "sh2/generated/queue_processor.inc"
 
 ; ============================================================================
-; GENERAL QUEUE DRAIN: 0x301000 (SH2 address: 0x02301000)
+; GENERAL QUEUE DRAIN: 0x301000 — STATUS: DORMANT (Track 1 Phase 3, deactivated)
 ; ============================================================================
-; Async queue processor for general SH2 commands ($22, $25, $2F, $21).
+; Was: Async queue processor for general SH2 commands ($22, $25, $2F, $21).
 ; Replays the COMM register protocol for each queued entry, moving the
 ; blocking waits from the 68K to the Slave SH2.
 ;
@@ -331,7 +330,7 @@ general_queue_drain:
         include "sh2/generated/general_queue_drain.inc"
 
 ; ============================================================================
-; CMD22 SINGLE-SHOT HANDLER: 0x3010F0 (SH2 address: 0x023010F0)
+; CMD22 SINGLE-SHOT HANDLER: 0x3010F0 — STATUS: ACTIVE (B-004, JT $020808)
 ; ============================================================================
 ; Inline COMM cleanup protocol (Phase 2 optimization):
 ;   Replaces hw_init_short JSR with inline byte/word-level COMM writes.
@@ -350,15 +349,12 @@ cmd22_single_shot:
         include "sh2/generated/cmd22_single_shot.inc"
 
 ; ============================================================================
-; VISIBILITY BITMASK HANDLER: 0x3011A0 (SH2 address: 0x023011A0)
+; VISIBILITY BITMASK HANDLER: 0x3011A0 — STATUS: DORMANT (S-1c reverted)
 ; ============================================================================
-; Stage 1 Phase 2: Entity visibility descriptor patcher. Reads 15-bit
-; bitmask from COMM3, stores to SDRAM $2203E020, then patches 15 entity
-; descriptor flag words at $2200C344 (stride $14). Slave SH2 entity loops
-; skip entities with flag=0, reducing SSH2 rendering workload.
-;
-; COMM layout: COMM0=$0107 (trigger+index), COMM3=bitmask (15 bits).
-; Jump table entry $07 at $06000780+$1C=$0600079C → $023011A0.
+; Was: Entity visibility descriptor patcher. Reads 15-bit bitmask from COMM3,
+; patches 15 entity descriptor flag words at $2200C344 (stride $14).
+; Reverted: S-1d profiling proved entity descriptors at $0600C344 are unused
+; during racing. Jump table entry $07 restored to original handler ($06000490).
 ;
 ; See: disasm/sh2/expansion/vis_bitmask_handler.asm for source
 ;
