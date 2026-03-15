@@ -29,7 +29,7 @@ V-INT Entry ($001684)
   │
   └─ If non-zero:
        ├─ SR = $2700           ; Disable all interrupts
-       ├─ MOVEM.L D0-D7/A0-A6  ; Save 14 registers
+       ├─ MOVEM.L D0-D7/A0-A6  ; Save 15 registers
        ├─ D0 = [$FFC87A]       ; Load state index
        ├─ [$FFC87A] = 0        ; Clear (acknowledge)
        ├─ JSR via jump table   ; Dispatch to handler

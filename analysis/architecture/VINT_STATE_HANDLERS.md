@@ -60,12 +60,12 @@ $001A62:  RTS
 - `$40000010` = VSRAM write at offset $00
 
 **VDP Register Writes:**
-- `$9340` = Reg 19: H-scroll table address
-- `$9400` = Reg 20: Plane size 64x32
-- `$9540` = Reg 21: Window H position
-- `$96C2` = Reg 22: Window V position
-- `$977F` = Reg 23: DMA length (low)
-- `$C000` = Reg 24: DMA source address (high)
+- `$9340` = Reg 19: DMA length low = $40
+- `$9400` = Reg 20: DMA length high = $00
+- `$9540` = Reg 21: DMA source low = $40
+- `$96C2` = Reg 22: DMA source mid = $C2
+- `$977F` = Reg 23: DMA source high/type = $7F
+- `$C000` = VRAM address command (not a register write)
 - `$80xx` = Cached VDP register values from $C876
 
 **Frequency:** Used by 4 states (most common handler)
@@ -132,34 +132,34 @@ $001C84:  MOVE.W  #$0100,$00A11100     ; Z-Bus request
 ... (VDP operations)
 $001CCA:  TST.B   $00A15120            ; Check COMM0 (SH2 handshake)
 $001CD0:  BNE.S   end                  ; Skip if SH2 busy
-$001CD2:  BCLR    #7,$00A15100         ; Disable 32X adapter
-$001CDA:  BTST    #7,$00A1518A         ; Wait for frame buffer ready
+$001CD2:  BCLR    #7,$00A15100         ; Clear REN (SH2 Reset Enable) in Adapter Control
+$001CDA:  BTST    #7,$00A1518A         ; Test VBLK (bit 15 of FB Control) — wait for V Blank
 $001CE2:  BEQ.S   -8
 $001CE4:  JSR     $002878(PC)          ; Call frame buffer routine
 $001CE8:  BCHG    #0,$C80C.W           ; Toggle frame buffer flag
 $001CEE:  BNE.S   skip_set
-$001CF0:  BSET    #0,$00A1518B         ; Set frame buffer control
+$001CF0:  BSET    #0,$00A1518B         ; Set FS bit (swap to DRAM1 display)
 $001CF8:  BRA.S   done
 skip_set:
-$001CFA:  BCLR    #0,$00A1518B         ; Clear frame buffer control
+$001CFA:  BCLR    #0,$00A1518B         ; Clear FS bit (swap to DRAM0 display)
 done:
-$001D02:  BSET    #7,$00A15100         ; Re-enable 32X adapter
+$001D02:  BSET    #7,$00A15100         ; Set REN (SH2 Reset Enable) in Adapter Control
 $001D0A:  RTS
 ```
 
 **32X Registers:**
 - $A15120 (COMM0): SH2 communication status
-- $A15100 (INTCTL): Adapter control (REN bit)
-- $A1518A (FBCTL): Frame buffer control
-- $A1518B (FBCTL+1): Frame buffer selection
+- $A15100 (Adapter Control): FM=bit 15, REN=bit 7, RES=bit 1, ADEN=bit 0
+- $A1518A (Frame Buffer Control): VBLK=bit 15, HBLK=bit 14, PEN=bit 13, FEN=bit 1 (Read Only), FS=bit 0 (R/W)
+- $A1518B (FB Control low byte): FS=bit 0 (frame buffer swap, deferred to next VBlank if written during display)
 - $C80C.W: Frame buffer toggle flag (RAM)
 
 **Analysis:**
-- Disables 32X adapter temporarily (BCLR #7)
-- Waits for frame buffer ready
-- Toggles between frame buffers
-- Re-enables 32X adapter
-- Critical for double-buffering
+- Clears REN bit temporarily (BCLR #7 on Adapter Control $A15100)
+- Waits for V Blank (BTST #7 = VBLK bit 15 on FB Control $A1518A)
+- Toggles FS bit (bit 0 at $A1518B) to swap frame buffers
+- Restores REN bit (BSET #7 on Adapter Control)
+- Critical for double-buffering; FS write during VBlank takes effect immediately
 
 ---
 
@@ -175,20 +175,20 @@ $001ACA:  MOVE.W  (A5),D0              ; VDP read
 $001ACC:  MOVE.W  #$0100,$00A11100     ; Z-Bus request
 $001AD4:  BTST    #0,$00A11100         ; Wait
 ...
-$001AE8:  MOVE.L  #$93809401,(A5)      ; VDP regs 19-20
-$001AEE:  MOVE.L  #$951E96C0,(A5)      ; VDP regs 21-22
-$001AF4:  MOVE.W  #$977F,(A5)          ; VDP reg 23
-$001AF8:  MOVE.W  #$6C3C,(A5)          ; VDP reg 24 (different value!)
+$001AE8:  MOVE.L  #$93809401,(A5)      ; VDP regs 19-20 (DMA length)
+$001AEE:  MOVE.L  #$951E96C0,(A5)      ; VDP regs 21-22 (DMA source low/mid)
+$001AF4:  MOVE.W  #$977F,(A5)          ; VDP reg 23 (DMA source high/type)
+$001AF8:  MOVE.W  #$6C3C,(A5)          ; VRAM address command
 $001AFC:  MOVE.W  #$0083,$C876.W       ; Update cache
 $001B02:  MOVE.W  $C876.W,(A5)         ; Write to VDP
 $001B12:  RTS
 ```
 
 **VDP Register Differences:**
-- `$9401` = Reg 20: Different plane size
-- `$951E` = Reg 21: Different window position
-- `$96C0` = Reg 22: Different window V pos
-- `$6C3C` = Reg 24: Different DMA source
+- `$9401` = Reg 20: DMA length high = $01
+- `$951E` = Reg 21: DMA source low = $1E
+- `$96C0` = Reg 22: DMA source mid = $C0
+- `$6C3C` = VRAM address command (not a register write)
 
 **Analysis:**
 - Likely used for sprite table updates
@@ -211,10 +211,10 @@ $001E44:  MOVE.L  #$6C000003,(A5)      ; VRAM write
 $001E60:  MOVE.W  #$0000,$C87E.W       ; Clear counter
 $001E66:  BCHG    #0,$C80C.W           ; Toggle frame buffer
 $001E6C:  BNE.S   clear_fb
-$001E6E:  BSET    #0,$00A1518B         ; Set FB bit
+$001E6E:  BSET    #0,$00A1518B         ; Set FS bit (swap to DRAM1 display)
 $001E76:  BRA.S   copy
 clear_fb:
-$001E78:  BCLR    #0,$00A1518B         ; Clear FB bit
+$001E78:  BCLR    #0,$00A1518B         ; Clear FS bit (swap to DRAM0 display)
 copy:
 $001E80:  LEA     $A100.W,A0           ; Source: MD RAM
 $001E84:  LEA     $00A15200,A1         ; Dest: 32X palette RAM
@@ -255,10 +255,10 @@ $001B5E:  MOVE.W  #$6000,(A5)          ; Different DMA source
 ```
 
 **VDP Differences:**
-- `$9403` = Different plane size
-- `$9500` = Different window H
-- `$9688` = Different window V
-- `$6000` = Different DMA source
+- `$9403` = Reg 20: DMA length high = $03
+- `$9500` = Reg 21: DMA source low = $00
+- `$9688` = Reg 22: DMA source mid = $88
+- `$6000` = VRAM address command
 
 **Subsequent Operations:**
 - Writes another VDP register set
@@ -329,15 +329,15 @@ $001C64:  RTS
 ```asm
 $001E94:  MOVE.W  (A5),D0              ; VDP read
 ... (VDP register config)
-$001EDC:  BTST    #0,$00A15123         ; Check COMM3 (SH2 command)
+$001EDC:  BTST    #0,$00A15123         ; Check COMM1_LO bit 0 (SH2 "done" signal)
 $001EE4:  BEQ.S   skip                 ; Skip if not set
-$001EE6:  BCLR    #0,$00A15123         ; Clear command flag
+$001EE6:  BCLR    #0,$00A15123         ; Clear COMM1_LO bit 0 (SH2 "done" signal)
 $001EEE:  CMPI.B  #$0018,$C8C5.W       ; Check game state
 $001EF4:  BNE.S   +8
 $001EF6:  MOVE.W  #$0000,$C87E.W       ; Reset counter if state $18
 $001EFC:  MOVE.B  #$0000,$C8C4.W       ; Clear flag
-$001F02:  BCLR    #7,$00A15100         ; Disable 32X adapter
-$001F0A:  BTST    #7,$00A1518A         ; Wait for FB ready
+$001F02:  BCLR    #7,$00A15100         ; Clear REN (SH2 Reset Enable) in Adapter Control
+$001F0A:  BTST    #7,$00A1518A         ; Test VBLK (bit 15 of FB Control) — wait for V Blank
 ... (Frame buffer toggle + palette copy)
 $001F14:  LEA     $B400.W,A1           ; Source data
 $001F18:  LEA     $00A15200,A2         ; Dest: 32X palette
@@ -349,9 +349,9 @@ $001F48:  RTS
 ```
 
 **32X Operations:**
-- COMM3 ($A15123): SH2 command register
+- COMM1_LO ($A15123): SH2 "render done" signal (bit 0)
 - Palette copy from $B400 (MD RAM) to $A15200 (32X palette)
-- Frame buffer toggle
+- Frame buffer toggle (FS bit at $A1518B)
 
 **Analysis:**
 - Checks for SH2 command completion
@@ -370,12 +370,12 @@ $001F48:  RTS
 ```asm
 $001F4A:  MOVE.W  (A5),D0              ; VDP read
 ... (VDP operations)
-$001FAE:  BTST    #0,$00A15123         ; Check COMM3
+$001FAE:  BTST    #0,$00A15123         ; Check COMM1_LO bit 0
 $001FB6:  BEQ.S   skip
-$001FB8:  BCLR    #0,$00A15123         ; Clear command
+$001FB8:  BCLR    #0,$00A15123         ; Clear COMM1_LO bit 0 (SH2 "done" signal)
 $001FC0:  MOVE.W  #$0000,$C87E.W       ; Reset counter
-$001FC6:  BCLR    #7,$00A15100         ; Disable adapter
-$001FCE:  BTST    #7,$00A1518A         ; Wait FB ready
+$001FC6:  BCLR    #7,$00A15100         ; Clear REN (SH2 Reset Enable) in Adapter Control
+$001FCE:  BTST    #7,$00A1518A         ; Test VBLK (bit 15 of FB Control) — wait for V Blank
 $001FD8:  LEA     $00FF6E00,A1         ; Source: MD RAM high
 $001FDE:  LEA     $00A15200,A2         ; Dest: 32X palette
 $001FE4:  JSR     $0048D6(PC)          ; Copy
@@ -400,9 +400,9 @@ $00200E:  RTS
 **Operations:**
 ```asm
 $002010:  MOVE.W  (A5),D0              ; VDP read
-$002012:  BTST    #0,$00A15123         ; Check COMM3
+$002012:  BTST    #0,$00A15123         ; Check COMM1_LO bit 0
 $00201A:  BEQ.S   done                 ; Skip if not set
-$00201C:  BCLR    #0,$00A15123         ; Clear command
+$00201C:  BCLR    #0,$00A15123         ; Clear COMM1_LO bit 0 (SH2 "done" signal)
 $002024:  CMPI.B  #$0018,$C8C5.W       ; Check game state
 $00202A:  BNE.S   +8
 $00202C:  MOVE.W  #$0000,$C87E.W       ; Reset counter
@@ -444,11 +444,11 @@ State 11: Triggers state machine transitions
 - $8002.W: VDP data mirror 2
 
 ### 32X Registers
-- $A15100: Adapter control (INTCTL)
+- $A15100: Adapter Control Register (FM=bit 15, REN=bit 7, RES=bit 1, ADEN=bit 0)
 - $A15120: COMM0 (68K ↔ SH2 handshake)
-- $A15123: COMM3 (68K ↔ SH2 commands)
-- $A1518A: Frame buffer control (FBCTL)
-- $A1518B: Frame buffer selection (FBCTL+1)
+- $A15123: COMM1_LO (SH2 "render done" signal, bit 0)
+- $A1518A: Frame Buffer Control Register (VBLK=bit 15, HBLK=bit 14, PEN=bit 13, FEN=bit 1 R/O, FS=bit 0 R/W)
+- $A1518B: Frame Buffer Control low byte (FS=bit 0, swap deferred to next VBlank if written during display)
 - $A15200: 32X palette RAM (512 bytes)
 
 ### RAM Variables
@@ -479,39 +479,39 @@ State 11: Triggers state machine transitions
 - `$40000010`: VSRAM write to offset $00 (scroll registers)
 
 ### VDP Register Writes
-Format: `$9XYZ` where X = register number, YZ = value
+Format: `$80+reg` in high byte, data in low byte. E.g., `$93xx` = VDP register 19.
 
-**Register 19 (Horizontal Scroll Table):**
-- `$9340`: H-scroll table at $D000
-- `$9320`: H-scroll table at $C800
-- `$9380`: H-scroll table at $E000
+**Register 19 (DMA Length Low, REG #19):**
+- `$9340`: DMA length low = $40
+- `$9320`: DMA length low = $20
+- `$9380`: DMA length low = $80
 
-**Register 20 (Plane Size):**
-- `$9400`: 64x32 cells
-- `$9401`: 64x64 cells (different)
-- `$9403`: 128x32 cells (different)
+**Register 20 (DMA Length High, REG #20):**
+- `$9400`: DMA length high = $00
+- `$9401`: DMA length high = $01
+- `$9403`: DMA length high = $03
 
-**Register 21 (Window H Position):**
-- `$9540`: Window H = $40
-- `$9500`: Window H = $00
-- `$951E`: Window H = $1E
-- `$9580`: Window H = $80
+**Register 21 (DMA Source Low, REG #21):**
+- `$9540`: DMA source low = $40
+- `$9500`: DMA source low = $00
+- `$951E`: DMA source low = $1E
+- `$9580`: DMA source low = $80
 
-**Register 22 (Window V Position):**
-- `$96C2`: Window V = $C2
-- `$96C0`: Window V = $C0
-- `$9688`: Window V = $88
-- `$968B`: Window V = $8B
-- `$96D8`: Window V = $D8
+**Register 22 (DMA Source Mid, REG #22):**
+- `$96C2`: DMA source mid = $C2
+- `$96C0`: DMA source mid = $C0
+- `$9688`: DMA source mid = $88
+- `$968B`: DMA source mid = $8B
+- `$96D8`: DMA source mid = $D8
 
-**Register 23 (DMA Length Low):**
-- `$977F`: DMA length = $7F (common)
+**Register 23 (DMA Source High/Type, REG #23):**
+- `$977F`: DMA source high = $7F (type bits: memory-to-VRAM DMA)
 
-**Register 24 (DMA Source/Command):**
-- `$C000`: DMA source high byte = $00
-- `$6000`: DMA source high byte = different
-- `$4000`: DMA source high byte = different
-- `$6C3C`: DMA source high byte = $3C
+**VRAM Address / DMA Commands (via VDP control port, not register writes):**
+- `$C000`: VRAM address command
+- `$6000`: VRAM address command
+- `$4000`: VRAM address command
+- `$6C3C`: VRAM address command
 
 ---
 

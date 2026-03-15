@@ -14,18 +14,20 @@ Complete reference for 32X system registers accessed by both MEGA Drive (68000) 
 ### Adapter Control Register
 **Address:** `A1 5100h` (Byte/Word Access)
 
-| Bit | 15-8 | 7 | 6-2 | 1 | 0 |
-|-----|------|---|-----|---|---|
-| Mode | R/W | Read only | - | R/W | R/W |
-| Name | FM | REN | - | RES | ADEN |
+| Bit | 15 | 14-8 | 7 | 6-2 | 1 | 0 |
+|-----|-----|------|---|-----|---|---|
+| Mode | R/W | Read only | R/W | - | R/W | R/W |
+| Name | FM | - | REN | - | RES | ADEN |
 
-**FM** - VDP Access Authorization
+**FM** (bit 15) - VDP Access Authorization
 - `0`: MD (68000) has VDP access (initial value)
 - `1`: SH2 has VDP access
 
 ⚠️ **CRITICAL:** Switching access authorization occurs **immediately** when writing to FM bit. If the 68K writes to FM while SH2 is accessing VDP, access is **forced** to switch to MEGA Drive, potentially corrupting ongoing VDP operations.
 
-**REN** - SH2 Reset Enable
+> **68K byte access note:** VRD uses `BCLR/BSET #7,$A15100` because 68K byte access to an even address targets the HIGH byte of the word register. FM at word-bit 15 = byte-bit 7 of the high byte.
+
+**REN** (bit 7) - SH2 Reset Enable
 - `0`: Disable
 - `1`: Enable
 
@@ -78,19 +80,25 @@ Controls ROM cartridge bank switching (256KB window):
 
 ---
 
-### DMAC Transfer Control Register
+### DREQ Control Register
 **Address:** `A1 5106h` (Byte/Word Access)
 
 | Bit | 15-8 | 7 | 6-3 | 2 | 1 | 0 |
 |-----|------|---|-----|---|---|---|
-| Mode | - | Read only | - | R/W | R/W | R/W |
+| Mode | - | Read only | - | R/W | - | R/W |
 | Name | - | FULL | - | 68S | 0 | RV |
 
-**FULL** - DMA FIFO Full
+**FULL** (bit 7) - DMA FIFO Full
 - `0`: Can write
 - `1`: Cannot write
 
-**RV** - ROM to VRAM DMA
+**68S** (bit 2) - DMA Mode
+- `0`: No Operation
+- `1`: CPU Write (68K writes data in FIFO)
+
+The internal system starts operation when 68S is 1. Writing 0 force-ends the operation. It is automatically set to 0 after DMA ends.
+
+**RV** (bit 0) - ROM to VRAM DMA
 - `0`: NO OPERATION (initial value)
 - `1`: DMA Start Allowed
 
@@ -105,13 +113,7 @@ Controls ROM cartridge bank switching (256KB window):
 
 **VRD Status (B-008, 2026-02-16):** VRD never sets RV=1. The game uses CPU Write mode (`#$04` = 68S) for all DREQ transfers, never ROM-to-VRAM DMA. Expansion ROM is safe for SH2 execution at all times.
 
-**68S** - DMA Mode
-- `0`: No Operation
-- `1`: CPU Write (68K writes data in FIFO)
-
-> **Note on bit layout:** The hardware manual (§3.2) shows a compact layout `{FULL=bit2, RV=bit1, 68S=bit0}`, but VRD's actual register access confirms the layout above: `move.b #$04,$A15107` sets 68S (bit 2), `btst #7,$A15107` tests FULL (bit 7). This matches the expanded layout in this table. The hardware manual's compact table appears to show logical field ordering, not physical bit positions.
-
-The internal system starts operation when 68S is 1. Writing 0 force-ends the operation. It is automatically set to 0 after DMA ends.
+> **VRD code confirmation:** `move.b #$04,$A15107` sets 68S (bit 2), `btst #7,$A15107` tests FULL (bit 7). The hardware manual bit layout table above matches these code patterns exactly.
 
 **68K to SH DREQ Source Address Register:** `A1 5108h` / `A1 510Ah` (High/Low Order)
 *Note: Because DREQ circuit does not use this data, nothing needs to be set at the time of CPU WRITE.*
@@ -153,23 +155,23 @@ The internal system starts operation when 68S is 1. Writing 0 force-ends the ope
 ### PWM Control Register
 **Address:** `A1 5130h` (Byte/Word Access)
 
-| Bit | 15-12 | 11-8 | 7 | 6-3 | 2-1 | 0 |
-|-----|-------|------|---|-----|-----|---|
-| Mode | Read only | Read only | R/W | - | R/W | R/W |
-| Name | TM3-TM0 | RTP | - | RMD1-RMD0 | LMD1-LMD0 |
+| Bit | 15-12 | 11-8 | 7 | 6-4 | 3-0 |
+|-----|-------|------|---|-----|-----|
+| Mode | - | Read only | Read only | - | R/W |
+| Name | - | TM3-TM0 | RTP | - | RMD0, RMD1, LMD0, LMD1 |
 
-**TM3-0** - PWM timer interrupt interval (read only)
-**RTP** - DREQ 1 occurrence enable (SH2 side only)
+**TM3-0** (bits 11-8) - PWM timer interrupt interval (read only from MD side; set from SH2 side)
+**RTP** (bit 7) - DREQ 1 occurrence enable (SH2 side only, read only from MD side)
 - `0`: OFF (initial value)
 - `1`: ON
 
-**RMD1/RMD0** - Right channel output
+**RMD0/RMD1** (bits 3-2) - Right channel output
 - `00`: OFF
 - `01`: R
 - `10`: L
 - `11`: Setting not allowed
 
-**LMD1/LMD0** - Left channel output
+**LMD0/LMD1** (bits 1-0) - Left channel output
 - `00`: OFF
 - `01`: L
 - `10`: R
@@ -214,7 +216,7 @@ The cycle counter does not operate when both L ch and R ch are off.
 The value set by bit 11-0 × Scyc becomes the pulse width.
 
 **Important FIFO Behavior:**
-> "Bits D0~D11 of all L ch, R ch and MONO pulse width registers are write only. When read is performed, undefined data is read. Each PWM of L ch and R ch have time separate FIFO steps. When both the L and R channels are off, because the cycle counter does not operate, once the FULL bit is set to i1i, it will not become i0i as long as the channels are not turned on. When either the L of R channel is on, because the OFF side FIFO is also operating, no sound will be output; however, data within FIFO will disappear. If writing when FIFO is FULL, the oldest data is discarded and shift occurs one item at a time."
+> "Bits D0-D11 of all L ch, R ch, and MONO pulse width registers are write only. When read is performed, undefined data is read. Each PWM of L ch and R ch have three separate FIFO steps. When both L and R channels are off, because the cycle counter does not operate, once the FULL bit is set to 1, it will not become 0 as long as the channels are not turned on. When either L or R channel is on, because the OFF side FIFO is also operating, no sound will be output; however, data within FIFO will disappear. If writing when FIFO is FULL, the oldest data is discarded and shift occurs one item at a time."
 
 ---
 
@@ -223,9 +225,9 @@ The value set by bit 11-0 × Scyc becomes the pulse width.
 ### Interrupt Mask Register
 **Address:** `2000 4000h` (Byte/Word Access)
 
-| Bit | 15 | 14-9 | 8 | 7 | 6-4 | 3 | 2 | 1 | 0 |
-|-----|----|----- |---|---|-----|---|---|---|---|
-| Mode | R/W | Read only | R/W | Read only | - | R/W | R/W | R/W | R/W |
+| Bit | 15 | 14-10 | 9 | 8 | 7 | 6-4 | 3 | 2 | 1 | 0 |
+|-----|-----|-------|---|---|---|-----|---|---|---|---|
+| Mode | R/W | - | R/W | Read only | R/W | - | R/W | R/W | R/W | R/W |
 | Name | FM | - | ADEN | CART | HEN | - | V | H | CMD | PWM |
 
 **FM** - VDP Access Authorization
@@ -233,7 +235,7 @@ The value set by bit 11-0 × Scyc becomes the pulse width.
 - `1`: SH2
 
 ⚠️ **CRITICAL - VDP ACCESS PREEMPTION:**
-> "Please note carefully that if a i11 is written to the FM bit, access authorisation is forced to switch to the SH2 side, even if access of VDP is in progress in the MEGA Drive side."
+> "If a 1 is written to the FM bit, access authorization is forced to switch to the SH2 side, even if access of VDP is in progress on the MEGA Drive side."
 
 **ADEN** - Adapter Enable Bit
 - `0`: The 32x use prohibited
@@ -378,11 +380,11 @@ Simultaneous writes to same COMM register from both 68K and SH2 result in **unde
 - Use separate COMM slots for each direction
 - VRD uses COMM7 (Master→Slave) and COMM5 (counter) - verify no overlaps
 
-### 4. Edge-Triggered Interrupts
-All interrupts (V, H, CMD, PWM, VRES) require **explicit clearing** via interrupt clear registers. If not cleared, interrupt will not occur again (not level-triggered).
+### 4. Interrupt Clearing Requirement
+All interrupts (V, H, CMD, PWM, VRES) require **explicit clearing** via interrupt clear registers. If not cleared, the interrupt will not fire again. Note: CMDINT has special mask-sensitive behavior — masking temporarily negates it, but unmasking reasserts it if not cleared (see §Interrupt Behavior Details above).
 
 ### 5. PWM FIFO Behavior
-- 4-step FIFO for pulse width values
+- 3-step FIFO for pulse width values
 - Writing when FULL discards oldest data and shifts queue
 - FULL bit stays set when both L/R channels off (cycle counter stops)
 
@@ -427,7 +429,7 @@ Writing FS bit to swap frame buffers is **always allowed**, but actual swap occu
 
 | Bit | 15 | 14 | 13 | 12-2 | 1 | 0 |
 |-----|----|----|----|----- |---|---|
-| Mode | Read only | Read only | Read only | - | R/W | R/W |
+| Mode | Read only | Read only | Read only | - | Read only | R/W |
 | Name | VBLK | HBLK | PEN | - | FEN | FS |
 
 **VBLK** - V Blank Status
@@ -447,11 +449,11 @@ Writing FS bit to swap frame buffers is **always allowed**, but actual swap occu
 
 **Exception:** Palette can access whenever bitmap mode is in direct color mode, as well as during Blank.
 
-**FEN** - Frame Buffer Authorization
+**FEN** - Frame Buffer Authorization (Read only)
 - `0`: Access approved
-- `1`: Access denied
+- `1`: Access denied (FILL in progress)
 
-**After Fill Operation:** Be sure to access Frame Buffer after confirming that `FEN = 0`.
+**After Fill Operation:** Be sure to access Frame Buffer after confirming that `FEN = 0`. FEN is a read-only status bit that indicates whether a VDP auto-fill operation is in progress. It cannot be written by software.
 
 **FS** - Frame Buffer Swap
 - `0`: Transfers DRAM0 to VDP side (initial value)
@@ -491,7 +493,7 @@ Switching is allowed at any time, but is valid from the next line.
 |-----|------|-----|
 | Mode | - | R/W |
 
-Word length when filling DRAM (frame buffer). To set this value, set the value for the to-be-filled word length (0-255).
+Word length when filling DRAM (frame buffer). To set this value, set the to-be-filled word length **minus 1** (0-255). For example, to fill 256 words, set 255.
 
 ---
 

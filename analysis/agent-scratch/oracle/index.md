@@ -282,7 +282,8 @@ $FF0000–$FFFFFF   68K Work RAM (NOT accessible from SH2 at any address)
 #### SH2 Address Space
 ```
 $00000000–$01FFFFFF   Boot ROM / unmapped (avoid)
-$02000000–$0203FFFF   SDRAM (256 KB) — shared with 68K via banking
+$02000000–$0203FFFF   ROM Cartridge (cached)
+$06000000–$0603FFFF   SDRAM (256 KB) — shared with 68K via COMM/DREQ
 $02300000–$023FFFFF   Expansion ROM (1 MB, SH2-executable only)
 $04000000–$041FFFFF   Frame Buffer (FM bit controls access)
 $06000000–$06FFFFFE   SDRAM mirror (cached alias = $02000000 range)

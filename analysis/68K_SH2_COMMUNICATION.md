@@ -90,22 +90,22 @@ After power-on, the boot ROM coordinates startup between all three processors us
 │    1. Initialize FRT for interrupt correction                   │
 │    2. Write "M_OK" (0x4D5F4F4B) to COMM0                       │
 │    3. Wait for COMM0 = 0 (68K start signal)                    │
-│    4. Wait for "SLAV" (0x534C4156) in COMM8                    │
+│    4. Wait for "SLAV" (0x534C4156) in COMM4+COMM5              │
 │    5. Configure serial interface                                │
 │    6. Enable interrupts (SR = 0x20)                            │
 │                                                                 │
 │  Slave SH2:                                                     │
 │    1. Initialize FRT for interrupt correction                   │
-│    2. Write "SLAV" (0x534C4156) to COMM8                       │
-│    3. Write "S_OK" (0x535F4F4B) to COMM4                       │
-│    4. Wait for COMM4 = 0 (68K start signal)                    │
+│    2. Write "SLAV" (0x534C4156) to COMM4+COMM5                 │
+│    3. Write "S_OK" (0x535F4F4B) to COMM2+COMM3                 │
+│    4. Wait for COMM2+COMM3 = 0 (68K start signal)              │
 │    5. Enable interrupts (SR = 0x20)                            │
 │                                                                 │
 │  68000:                                                         │
 │    1. Wait for "M_OK" in COMM0 (Master ready)                  │
-│    2. Wait for "S_OK" in COMM4 (Slave ready)                   │
-│    3. Clear COMM0 to 0 (signal Master to start)                │
-│    4. Clear COMM4 to 0 (signal Slave to start)                 │
+│    2. Wait for "S_OK" in COMM2+COMM3 (Slave ready)             │
+│    3. Clear COMM0+COMM1 to 0 (signal Master to start)          │
+│    4. Clear COMM2+COMM3 to 0 (signal Slave to start)           │
 │    5. Set initflug = "INIT" (0x494E4954)                       │
 │    6. Continue to main program                                  │
 │                                                                 │
@@ -118,9 +118,9 @@ After power-on, the boot ROM coordinates startup between all three processors us
 
 | Value | ASCII | Register | Meaning |
 |-------|-------|----------|---------|
-| 0x4D5F4F4B | "M_OK" | COMM0 | Master SH2 initialized |
-| 0x535F4F4B | "S_OK" | COMM4 | Slave SH2 initialized |
-| 0x534C4156 | "SLAV" | COMM8 | Slave ready for Master coordination |
+| 0x4D5F4F4B | "M_OK" | COMM0+COMM1 | Master SH2 initialized (Sega symbol: `comm0` = byte offset $20 from sysreg) |
+| 0x535F4F4B | "S_OK" | COMM2+COMM3 | Slave SH2 initialized (Sega symbol: `comm4` = byte offset $24 from sysreg) |
+| 0x534C4156 | "SLAV" | COMM4+COMM5 | Slave ready for Master coordination (Sega symbol: `comm8` = byte offset $28) |
 | 0x494E4954 | "INIT" | initflug (68K RAM) | Boot complete marker |
 
 ---

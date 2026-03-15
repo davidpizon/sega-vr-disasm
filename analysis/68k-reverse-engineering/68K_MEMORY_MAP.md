@@ -67,9 +67,9 @@ The Sega 32X adds hardware to the base Mega Drive/Genesis. From the 68000's pers
 
 | Address | R/W | Name | Description |
 |---------|-----|------|-------------|
-| `$A15100` | R/W | **MARS_SYS_INTCTL** | Adapter Control (FM, REN, RES, ADEN) |
-| `$A15102` | R/W | **MARS_SYS_INTMASK** | Interrupt Control (INTS, INTM) |
-| `$A15104` | R/W | **MARS_SYS_HCOUNT** | H Interrupt Vector |
+| `$A15100` | R/W | **MARS_ADAPTER_CTRL** | Adapter Control (FM=bit 15, REN=bit 7, RES=bit 1, ADEN=bit 0) |
+| `$A15102` | R/W | **MARS_INT_CTRL** | Interrupt Control (INTS=bit 1, INTM=bit 0) |
+| `$A15104` | R/W | **MARS_BANKSET** | ROM Bank Switching (BK1=bit 1, BK0=bit 0) |
 | `$A15106` | R/W | **MARS_DREQ_CTRL** | DREQ Control Register |
 | `$A15108` | R/W | **MARS_DREQ_SRC_H** | DREQ Source Address (high) |
 | `$A1510A` | R/W | **MARS_DREQ_SRC_L** | DREQ Source Address (low) |
@@ -97,9 +97,9 @@ The Sega 32X adds hardware to the base Mega Drive/Genesis. From the 68000's pers
 
 | Address | R/W | Name | Description |
 |---------|-----|------|-------------|
-| `$A15130` | R/W | **PWM_CTRL** | PWM Control |
+| `$A15130` | R/W | **PWM_CTRL** | PWM Control (TM/RTP=R/O from MD, LMD/RMD=R/W) |
 | `$A15132` | R/W | **PWM_CYCLE** | PWM Cycle Register |
-| `$A15134` | W | **PWM_LDATA** | PWM Left Channel Data |
+| `$A15134` | W | **PWM_LDATA** | PWM Left Channel Data (FULL/EMPTY=R/O) |
 | `$A15136` | W | **PWM_RDATA** | PWM Right Channel Data |
 | `$A15138` | W | **PWM_MONO** | PWM Mono Data |
 
@@ -112,18 +112,18 @@ The Sega 32X adds hardware to the base Mega Drive/Genesis. From the 68000's pers
 | `$A15184` | R/W | **MARS_VDP_FILLEN** | Auto Fill Length |
 | `$A15186` | R/W | **MARS_VDP_FILLADR** | Auto Fill Start Address |
 | `$A15188` | R/W | **MARS_VDP_FILLDATA** | Auto Fill Data |
-| `$A1518A` | R/W | **MARS_VDP_FBCTL** | Frame Buffer Control |
+| `$A1518A` | R/W | **MARS_VDP_FBCTL** | Frame Buffer Control (FS=R/W bit 0; FEN/PEN/HBLK/VBLK=R/O) |
 
 ### Mega Drive VDP
 
 | Address | R/W | Description |
 |---------|-----|-------------|
-| `$C00000` | W | VDP Data Port |
-| `$C00002` | W | VDP Data Port (mirror) |
+| `$C00000` | R/W | VDP Data Port |
+| `$C00002` | R/W | VDP Data Port (mirror) |
 | `$C00004` | R/W | VDP Control Port |
 | `$C00006` | R/W | VDP Control Port (mirror) |
 | `$C00008` | R | HV Counter |
-| `$C0000A` | R | HV Counter (mirror) |
+| `$C0000A` | - | Access Prohibited (per Genesis tech overview) |
 | `$C00011` | W | PSG Sound |
 | `$C00013` | W | PSG Sound (mirror) |
 | `$C00019` | W | PSG Sound (mirror) |
@@ -159,30 +159,28 @@ The Sega 32X adds hardware to the base Mega Drive/Genesis. From the 68000's pers
 | 31 | `$00007C` | `$00880832` | Level 7 IRQ (NMI) |
 | 32-47 | `$000080-$0BC` | `$00880832` | TRAP #0-15 |
 
-## MARS Adapter Control Register ($A15100)
+## MARS Adapter Control Register ($A15100) — Word Register
 
 ```
-Bit 7: FM    - Frame buffer access mode (0=68K, 1=SH2)
-Bit 6: (unused)
-Bit 5: (unused)
-Bit 4: (unused)
-Bit 3: (unused)
-Bit 2: (unused)
-Bit 1: REN   - ROM enable (0=disabled, 1=enabled)
-Bit 0: ADEN  - Adapter enable (0=disabled, 1=enabled)
+Bit 15: FM    - VDP access authorization (0=MD, 1=SH2)
+Bit 14-8: (reserved, read-only)
+Bit 7: REN   - SH2 reset enable (0=disable, 1=enable)
+Bit 6-2: (unused)
+Bit 1: RES   - SH2 reset (0=reset, 1=cancel reset)
+Bit 0: ADEN  - Adapter enable (0=prohibited, 1=permitted)
+
+Byte access: high byte ($A15100) has FM at bit 7
+             low byte ($A15101) has REN at bit 7, RES at bit 1, ADEN at bit 0
 ```
 
 ## Interrupt Control Register ($A15102)
 
 ```
-Bit 7: (unused)
-Bit 6: (unused)
-Bit 5: (unused)
-Bit 4: (unused)
-Bit 3: (unused)
-Bit 2: INTM  - Interrupt mask for CMD (0=masked, 1=enabled)
-Bit 1: INTS  - Interrupt status for CMD
-Bit 0: (unused)
+Bit 15-2: (unused)
+Bit 1: INTS  - Slave SH2 interrupt command (0=no-op, 1=interrupt)
+Bit 0: INTM  - Master SH2 interrupt command (0=no-op, 1=interrupt)
+
+Both are automatically cleared if SH2 does not interrupt-clear.
 ```
 
 ## Version Register ($A10001)
@@ -199,9 +197,9 @@ Bit 3-0: Hardware version
 
 ```asm
 ; 32X System
-MARS_SYS_INTCTL     equ $A15100
-MARS_SYS_INTMASK    equ $A15102
-MARS_SYS_HCOUNT     equ $A15104
+MARS_ADAPTER_CTRL   equ $A15100
+MARS_INT_CTRL       equ $A15102
+MARS_BANKSET        equ $A15104
 MARS_DREQ_CTRL      equ $A15106
 MARS_DREQ_SRC       equ $A15108
 MARS_DREQ_DST       equ $A1510C

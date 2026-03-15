@@ -48,7 +48,7 @@ CS 1 Area ($02000000-$03FFFFFF):
 - Read Protect: Access prohibited when RV=1 within SYS REG
 
 CS 2 Area ($04000000-$05FFFFFF):
-- DRAM (2 Mbit)
+- Frame Buffer + Overwrite Image (DRAM, 1 Mbit × 2)
 
 CS 3 Area ($06000000-$07FFFFFF):
 - SDRAM
@@ -56,10 +56,10 @@ CS 3 Area ($06000000-$07FFFFFF):
 
 **Our Implementation:**
 - ✅ Expansion ROM at $02300000-$023FFFFF (1 MB within CS 1 Area)
-- ✅ Within official "4 Mbit cartridge" allocation
+- ✅ Within official 32 Mbit cartridge allocation (4 MB used)
 - ✅ No overlap with original 3 MB program space
 - ✅ SH2 can execute from this space (CS 1 is cartridge ROM area)
-- ✅ SDRAM diagnostic mirror at 0x22000100 (within CS 3 Area)
+- ✅ SDRAM diagnostic mirror at 0x26000100 (within CS 3 Area, cache-through)
 
 ---
 
@@ -73,8 +73,10 @@ CS 3 Area ($06000000-$07FFFFFF):
 8 word bi-directional register
 Read/write possible from both MD and SH directions
 
-CRITICAL: "when writing the same register from both at the
-same time, the value of that register becomes undefined"
+CRITICAL: "if simultaneously writing the same register from both
+the 68000 and SH2, or if either the 68000 or SH2 is writing
+while the other is reading, the value of that register becomes
+undefined" (read-during-write is also hazardous, not just write-write)
 ```
 
 **Register Mapping (Word-aligned 16-bit access):**
@@ -92,9 +94,9 @@ same time, the value of that register becomes undefined"
 
 **SH2 Address Space Mapping:**
 
-Using MD offset + SH2 base ($20000000):
-- COMM4: $A15128 → $20004028 ✅
-- COMM6: $A1512C → $2000402C ✅
+SH2 COMM registers at $20004020-$2000402E (cache-through system register block):
+- COMM4: MD $A15128 = SH2 $20004028 ✅
+- COMM6: MD $A1512C = SH2 $2000402C ✅
 
 **Our Two-Register Protocol:**
 
@@ -136,22 +138,22 @@ Interrupt Levels:
 - IRL 6: PWM TIMER
 
 V-INT Handler Timing:
-- Fires during every V-Blank (~50 Hz NTSC, ~60 Hz PAL)
+- Fires during every V-Blank (~60 Hz NTSC, ~50 Hz PAL)
 - Entry point depends on game interrupt handlers
 ```
 
 **Original Game V-INT Handler:**
 - Location: $00037A (file offset, +0x00880000 for 68K address)
 - Reserved NOP space: 68 bytes ($00037A-$0003BE)
-- Our hook injection: 6 bytes ($00037A-$00037F) into reserved space
-- Remaining safety margin: 62 bytes untouched
+- Our hook injection: 8 bytes ($00037A-$000381) into reserved space
+- Remaining safety margin: 60 bytes untouched
 
 **Our Implementation:**
 
 ```asm
 $00037A: MOVE.W #$0012, $A1512C  ; Master writes 0x0012 to COMM6
-         (6 bytes, encoded as:)
-         dc.w $303C              ; opcode for MOVE.W #imm16, addr32
+         (8 bytes, encoded as:)
+         dc.w $33FC              ; opcode for MOVE.W #imm16,(addr).L
          dc.w $0012              ; immediate value
          dc.w $00A1              ; address high word
          dc.w $512C              ; address low word
@@ -288,15 +290,16 @@ CS 3 Area ($06000000-$07FFFFFF):
 **Our SDRAM Layout:**
 
 ```
-0x22000100: 32-bit frame counter (canonical truth)
+0x26000100: 32-bit frame counter (canonical truth)
              - Incremented by Slave in expansion_frame_counter
              - Readable from both 68K and Slave
              - Independent of COMM4 (redundant for diagnostics)
              - Cache-aware allocation (0x100 offset = 256 byte alignment)
+             - Uses cache-through SDRAM ($26xxxxxx), not cached ($06xxxxxx)
 
-0x22000104: 32-bit execution count (future use)
-0x22000108: 32-bit error flags (future use)
-0x2200010C: Reserved (cache line alignment)
+0x26000104: 32-bit execution count (future use)
+0x26000108: 32-bit error flags (future use)
+0x2600010C: Reserved (cache line alignment)
 ```
 
 **Why SDRAM:**
@@ -317,25 +320,25 @@ CS 3 Area ($06000000-$07FFFFFF):
 ```
 "8 word bi-directional register"
 → Each register is a 16-bit word
-→ Access is atomic 16-bit (not byte-wise)
+→ Access: Byte/Word (per hardware manual)
+→ SH2 can also do longword access spanning two adjacent COMM registers
 ```
 
 **Our Implementation:**
 
 ```asm
 Master (68K) - V-INT Hook:
-  MOVE.W #$0012, $A1512C  ; Write 16-bit word (atomic)
+  MOVE.W #$0012, $A1512C  ; Write 16-bit word to COMM6
 
 Slave (SH2) - Frame Counter:
-  mov.l @R0, R1           ; Read 16-bit value from COMM4
+  mov.l @R0, R1           ; Read 32-bit from COMM4+COMM5 (longword spans two registers)
   add #1, R1              ; Increment
-  mov.l R1, @R0           ; Write 16-bit value back
+  mov.l R1, @R0           ; Write 32-bit back to COMM4+COMM5
 ```
 
 **Compliance:**
-- ✅ COMM registers accessed as 16-bit words only
-- ✅ No byte-wise access (prevents partial updates)
-- ✅ Atomic operations (hardware-guaranteed on both CPUs)
+- ✅ COMM registers support byte, word, and longword access
+- ✅ Our protocol avoids simultaneous read/write and write/write hazards
 - ✅ Data integrity preserved across frame boundaries
 
 ---
@@ -344,12 +347,12 @@ Slave (SH2) - Frame Counter:
 
 ### Privilege & Protection
 
-**From Hardware Manual: Read Protect Flag (RV in SYS REG)**
+**From Hardware Manual: RV (ROM to VRAM DMA) Flag in DREQ Control ($A15106 bit 0)**
 
 ```
-"CS 1 Area access prohibited when RV=1 within SYS REG"
-→ Boot ROM can enable write protection on cartridge ROM
-→ Only affects write access to ROM, read is always allowed
+"SH2 cannot access ROM when RV=1; SH2 waits until RV=0"
+→ RV=1 blocks ALL SH2 ROM access (read and execute), not just writes
+→ RV is set by 68K to allow ROM-to-VRAM DMA without SH2 bus contention
 ```
 
 **Our Implementation:**
@@ -421,7 +424,7 @@ The expansion ROM implementation is hardware-compliant and ready for Phase 11 (S
 | Communication Port | COMM0-COMM7 registers | "Communication Port (A15120-A1512E)" |
 | Boot ROM Sequence | Timing, COMM0 sync | Hardware Manual Section 1.13 |
 | Interrupt Levels | V-INT characteristics | "Interrupt Levels" |
-| Read Protect (RV) | Security, cartridge write protection | MD Side SYS REG section |
+| RV (ROM to VRAM DMA) | SH2 ROM access blocking during DMA | DREQ Control Register ($A15106) |
 
 ---
 

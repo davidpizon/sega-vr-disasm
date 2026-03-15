@@ -132,9 +132,9 @@ From [SendDREQCommand](68K_HOTSPOT_FUNCTIONS.md#senddreqcommand-0088fb36---17-ca
 0088FB46  MOVE.B  #$04,MARS_DREQ_CTRL+1    ; Control flags = $04
 
 ; 3. Send command
-0088FB4E  CLR.B   COMM1+1                  ; Clear COMM1 high byte
-0088FB54  MOVE.B  #$2D,COMM0+1             ; Command = $2D
-0088FB5C  MOVE.B  #$01,COMM0               ; Signal ready
+0088FB4E  CLR.B   COMM1+1                  ; Clear COMM1 low byte ($A15123)
+0088FB54  MOVE.B  #$2D,COMM0+1             ; Command = $2D to COMM0 low byte ($A15121)
+0088FB5C  MOVE.B  #$01,COMM0               ; Signal ready via COMM0 high byte ($A15120)
 
 ; 4. Wait for acknowledge
 0088FB64  BTST    #1,COMM1+1               ; Test ack bit
@@ -176,23 +176,24 @@ From [SendDREQCommand](68K_HOTSPOT_FUNCTIONS.md#senddreqcommand-0088fb36---17-ca
 
 ## Frame Buffer Access Control
 
-The FM (Frame access Mode) bit in MARS_VDP_FBCTL ($A1518A) controls which CPU can access the frame buffer.
+The FM (VDP access authorization) bit is in the Adapter Control Register ($A15100), bit 15 of the word (bit 7 when byte-accessing the high byte at $A15100). FM=0 grants access to the MD side, FM=1 grants access to the SH2 side.
+
+**Note:** The Frame Buffer Control Register (MARS_VDP_FBCTL, $A1518A) contains FS (Frame Swap, bit 0), FEN (Fill in progress, bit 1, Read-Only), PEN (Palette access, bit 13, Read-Only), HBLK (bit 14, Read-Only), and VBLK (bit 15, Read-Only). It does NOT contain the FM bit.
 
 From [VDPFrameControl](68K_HOTSPOT_FUNCTIONS.md#vdpframecontrol-008826c8---10-calls) ($008826C8):
 
 ```asm
-; Grant 68K access to frame buffer
-008826CE  BCLR    #0,$8B(A4)               ; Clear FM bit
-                                           ; FM=0 → 68K access
+; Swap frame buffer (FS bit in MARS_VDP_FBCTL)
+008826CE  BCLR    #0,$8B(A4)               ; Clear FS bit (display DRAM0)
+                                           ; $8B(A4) = $A1518B (FBCTL low byte)
 
 ; ... 68K processes frame buffer ...
 
-; Return control to SH2
-008826DA  BSET    #0,$8B(A4)               ; Set FM bit
-                                           ; FM=1 → SH2 access
+; Swap back
+008826DA  BSET    #0,$8B(A4)               ; Set FS bit (display DRAM1)
 ```
 
-**Critical**: The FM bit must be synchronized with V-blank to avoid visual artifacts. Only one CPU should access the frame buffer at a time.
+**Critical**: FS swap is deferred to next V-Blank when written during display. FM bit (in Adapter Control $A15100) must also be coordinated to avoid simultaneous CPU access.
 
 ---
 
@@ -316,10 +317,10 @@ wait_ack:
 ### 3. Coordinate Frame Buffer Access
 
 ```asm
-; ✅ CORRECT
-    BCLR    #0,MARS_VDP_FBCTL  ; Request FB access
-    ; ... modify frame buffer ...
-    BSET    #0,MARS_VDP_FBCTL  ; Return to SH2
+; ✅ CORRECT — FM bit is in Adapter Control Register, NOT FBCTL
+    BCLR    #7,MARS_ADAPTER_CTRL  ; Clear FM bit (bit 15 of word = bit 7 of high byte)
+    ; ... 68K accesses frame buffer ...
+    BSET    #7,MARS_ADAPTER_CTRL  ; Set FM bit → return access to SH2
 
 ; ❌ WRONG
     ; (no FM bit control - both CPUs access simultaneously)

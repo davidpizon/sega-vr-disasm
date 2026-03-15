@@ -70,7 +70,7 @@ one VDP/framebuffer operation per frame via a state variable.
 
 ### FM Bit Lifecycle (per frame)
 
-The FM bit (bit 7 of `MARS_SYS_INTCTL` at $A15100) controls VDP/framebuffer access:
+The FM bit (bit 15 of Adapter Control Register at $A15100) controls VDP/framebuffer access:
 - FM=0 → 68K has access, SH2 blocked
 - FM=1 → SH2 has access, 68K blocked
 
@@ -78,6 +78,7 @@ During V-INT VDP operations (states 24, 36, 52):
 
 ```
 1. BCLR #7, $A15100          ; FM=0 — 68K claims VDP access
+                              ; (byte access: bit 7 of high byte = bit 15 of word = FM)
 2. BTST #7, $A1518A          ; Wait for VBLK=1 (V-blank period)
    BEQ.S .wait               ; (safe for palette + frame swap)
 3. ... palette DMA, frame swap, CRAM transfer ...
@@ -277,8 +278,8 @@ call graphs and register analysis, see
 - **Fixed-point math:** All transforms use 16.16 format (no FPU). The `XTRCT` instruction
   extracts MAC[47:16] for 32×32→64 multiply results.
 - **Reciprocal LUT** at $060048D0 for fast 1/Z division in the rasterizer.
-- **Data buffers** in SDRAM: transform matrices, vertex buffers, polygon buffers at
-  $22000000+ (cache-through for inter-CPU coherency).
+- **Data buffers** in SDRAM ($06000000+): transform matrices, vertex buffers, polygon buffers.
+  Cache-through access via $26000000+ when inter-CPU coherency is needed.
 
 ### Slave SH2 Interleaving
 
@@ -382,11 +383,11 @@ This function is called from V-INT state 24 (`vint_state_fb_toggle`):
    └─ If set → proceed:
        a. Clear COMM1_LO bit 0 (acknowledge)
        b. game_state ($FFC87E) = 0 (reset state)
-       c. BCLR #7, $A15100 (FM=0, 68K claims VDP)
-       d. Wait VBLK=1 ($A1518A bit 7)
+       c. BCLR #7, $A15100 (FM=0, byte-bit 7 = word-bit 15)
+       d. Wait VBLK=1 ($A1518A byte-bit 7 = word-bit 15)
        e. BCHG frame_toggle ($FFC80C)
        f. BSET/BCLR #0, $A1518B (set FS bit based on toggle)
-       g. BSET #7, $A15100 (FM=1, return to SH2)
+       g. BSET #7, $A15100 (FM=1, byte-bit 7 = word-bit 15)
 ```
 
 **Key synchronization:** The swap only happens when COMM1_LO bit 0 is set — this is
@@ -508,9 +509,9 @@ Source: [docs/32x-hardware-manual.md](../docs/32x-hardware-manual.md) §3.2.3,
 | COMM1 | $A15122 | $20004022 | System signal (bit 0 = "done") |
 | COMM2-6 | $A15124-$A1512C | $20004024-$2000402C | Command parameters |
 | COMM7 | $A1512E | $2000402E | Slave SH2 doorbell |
-| Adapter Ctrl | $A15100 | $20004000 | FM bit (bit 7) |
+| Adapter Ctrl | $A15100 | $20004000 | FM bit (bit 15; byte access: bit 7 of high byte) |
 | VDP Mode | $A15180 | $20004100 | PRI (bit 13), M1:M0 (bits 1:0) |
-| FB Control | $A1518A | $2000410A | VBLK (15), PEN (13), FEN (1), FS (0) |
+| FB Control | $A1518A | $2000410A | VBLK (15), PEN (13), FEN (1, read-only), FS (0, R/W) |
 | CRAM | $A15200 | $20004200 | 256 × 16-bit palette entries |
 | Frame Buffer | $840000 | $04000000 | DRAM (FM-controlled access) |
 | Overwrite | $860000 | $04020000 | Byte $00 = transparent |

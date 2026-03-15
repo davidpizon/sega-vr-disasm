@@ -18,12 +18,15 @@ This document consolidates all known data structures used by the 68K and SH2 CPU
 | Range | Size | Description |
 |-------|------|-------------|
 | $000000-$3FFFFF | 4MB | ROM (cartridge) |
-| $840000-$87FFFF | 256KB | 32X Frame Buffers (2×128KB) - **requires FM=0** |
+| $840000-$85FFFF | 128KB | 32X Frame Buffer - **requires FM=0** |
+| $860000-$87FFFF | 128KB | 32X Overwrite Image - **requires FM=0** |
 | $880000-$8FFFFF | 512KB | ROM Cartridge mirror ($000000-$07FFFF, 4Mbit fixed) |
 | $900000-$9FFFFF | 1MB | ROM Cartridge bank-switched (32Mbit÷4 banks via Bank Set Register) |
 | $A00000-$A0FFFF | 64KB | Z80 Sound RAM |
 | $A10000-$A1001F | 32B | Genesis I/O ports |
-| $A15100-$A152FF | 512B | 32X System Registers |
+| $A15100-$A15138 | 57B | 32X System Registers (Adapter Ctrl thru PWM Mono) |
+| $A15180-$A1518A | 11B | 32X VDP Registers |
+| $A15200-$A153FF | 512B | 32X Color Palette (256 entries × 16-bit) |
 | $A15120-$A1512F | 16B | COMM Registers (68K side) |
 | $C00000-$C0001F | 32B | VDP Registers |
 | $FF0000-$FFFFFF | 64KB | 68K Work RAM |
@@ -36,14 +39,15 @@ This document consolidates all known data structures used by the 68K and SH2 CPU
 | $00004000-$000040FF | 256B | SH2 System Registers | - |
 | $00004100-$000041FF | 256B | VDP Registers | - |
 | $00004200-$000043FF | 512B | Color Palette | - |
-| **$02000000-$0203FFFF** | **256KB** | **SDRAM** | Cached |
-| $04000000-$0401FFFF | 128KB | Cartridge ROM (per hardware manual §3.2) | Cached |
-| $04020000-$0403FFFF | 128KB | Frame Buffer - **requires FM=1** (per manual) | Cached |
-| $04040000-$0405FFFF | 128KB | Overwrite Image - **requires FM=1** (per manual) | Cached |
-| **$22000000-$2203FFFF** | **256KB** | **SDRAM (cache-through)** | Bypass |
+| $02000000-$023FFFFF | 4MB | ROM Cartridge (CS1) | Cached |
+| $04000000-$0401FFFF | 128KB | Frame Buffer (CS2) - **requires FM=1** | Cached |
+| $04020000-$0403FFFF | 128KB | Overwrite Image (CS2) - **requires FM=1** (per manual) | Cached |
+| **$06000000-$0603FFFF** | **256KB** | **SDRAM (CS3)** | Cached |
 | $20004000-$200040FF | 256B | System Registers (cache-through) | Bypass |
-| $24000000-$2401FFFF | 128KB | Cartridge ROM (cache-through) | Bypass |
-| $24020000-$2403FFFF | 128KB | Frame Buffer (cache-through) - **requires FM=1** | Bypass |
+| $22000000-$2203FFFF | 256KB | ROM Cartridge (cache-through) | Bypass |
+| $24000000-$2401FFFF | 128KB | Frame Buffer (cache-through) - **requires FM=1** | Bypass |
+| $24020000-$2403FFFF | 128KB | Overwrite Image (cache-through) - **requires FM=1** | Bypass |
+| **$26000000-$2603FFFF** | **256KB** | **SDRAM (cache-through)** | Bypass |
 
 **FM Bit (VDP Access Authorization):**
 - FM=0 (default): Only 68K can access frame buffer, overwrite image, VDP registers, color palette
@@ -52,19 +56,18 @@ This document consolidates all known data structures used by the 68K and SH2 CPU
 
 **Cache notes:**
 - Addresses $0X000000 use cache; $2X000000 bypass cache
-- **Critical for inter-CPU sharing:** Use cache-through ($22000000) for data shared between Master/Slave
-- **COMM register width:** SH2 reads/writes longwords (32-bit); 68K uses word pairs (16-bit). Writing COMM0 from 68K affects only the upper 16 bits of the SH2's longword view.
+- **Critical for inter-CPU sharing:** Use cache-through ($26000000) for SDRAM data shared between Master/Slave
+- **COMM register access:** Each COMM register is 16-bit. Both 68K and SH2 can access as byte or word. SH2 can also do longword reads/writes that span two adjacent COMM registers. The hardware manual specifies "Access: Byte/Word" for communication ports.
 
-**⚠️ CRITICAL - SDRAM Address Warning:**
+**SH2 SDRAM Address Note:**
 
-**$06000000 is EMULATOR-ONLY** (PicoDrive artifact) - **NOT in hardware manual!**
+Per the hardware manual SH2 memory map, SDRAM is at **$06000000** (cached) / **$26000000** (cache-through). These are the CS3 area addresses.
 
-- **Hardware Manual (§3.2)**: SDRAM is **only** at $02000000 (cached) or $22000000 (cache-through)
-- **$06000000 is UNDEFINED** on real 32X hardware
-- **Risk**: Code using $06000000 **will fail on real hardware**
-- **Action**: Use $02000000/$22000000 for all production code
+- **$02000000** is **ROM Cartridge** (CS1), NOT SDRAM
+- **$06000000** IS the correct SDRAM address per the official hardware manual
+- Cache-through SDRAM access: use **$26000000** (NOT $22000000, which is cache-through ROM)
 
-Historical note: Some legacy project code used $06000000 due to PicoDrive emulator behavior. This has been identified and should be migrated to standard addresses.
+Historical note: An earlier version of this document incorrectly listed SDRAM at $02000000 and claimed $06000000 was an emulator artifact. This was wrong -- the hardware manual explicitly maps SDRAM to CS3 at $06000000/$26000000.
 
 ---
 
@@ -82,7 +85,7 @@ Official wait states for SH2 memory access. Critical for performance optimizatio
 
 **FIFO Note**: The SH2 has a 4-word write FIFO for frame buffer. Batch writes in groups of 4 for optimal throughput (14 clocks for 4 words = 3.5 clocks/word average).
 
-### SDRAM (CS3: $02000000 / $22000000)
+### SDRAM (CS3: $06000000 / $26000000)
 
 | Operation | Wait Clocks | Notes |
 |-----------|-------------|-------|
@@ -93,7 +96,7 @@ Official wait states for SH2 memory access. Critical for performance optimizatio
 **Burst Mode**: After initial 12-clock penalty, sequential reads cost only 2 clocks each. Align data for sequential access:
 - 8-word burst: 12 + 14 = 26 clocks (vs. 96 clocks for 8 individual reads)
 
-### VDP Registers ($04004100)
+### VDP Registers ($00004100 / $20004100)
 
 | Operation | Wait Clocks |
 |-----------|-------------|
@@ -107,7 +110,7 @@ Official wait states for SH2 memory access. Critical for performance optimizatio
 | Read | 1 |
 | Write | 1 |
 
-### Color Palette ($04004200)
+### Color Palette ($00004200 / $20004200)
 
 | Operation | Wait Clocks |
 |-----------|-------------|
@@ -119,7 +122,7 @@ Official wait states for SH2 memory access. Critical for performance optimizatio
 | Resource | Timing |
 |----------|--------|
 | ROM via Cartridge Connector | Directly connected (no 32X overhead) |
-| 32X Frame Buffer ($840000) | Through RV signal handshake |
+| 32X Frame Buffer ($840000) | Requires FM=0 (VDP access authorization to MD) |
 | 32X Registers ($A15100) | Wait states as per §3.2 |
 | Z80 RAM ($A00000) | Standard Genesis timing |
 
@@ -136,7 +139,7 @@ Possible explanations:
 - Upper address bits decoded differently by 32X
 - May map to SDRAM or frame buffer region
 
-**Impact:** Cannot share transform buffers between CPUs without copying to cache-through region (0x22000XXX).
+**Impact:** Cannot share transform buffers between CPUs without copying to cache-through SDRAM (0x26000XXX).
 
 See [../sh2-analysis/SLAVE_INTEGRATION_RESEARCH.md](../sh2-analysis/SLAVE_INTEGRATION_RESEARCH.md) for cache-through staging strategies.
 
@@ -242,12 +245,16 @@ Used by `func_DF0` single-iteration loop. Special object (camera target, etc.)
 ### Memory Layout ($840000-$87FFFF)
 
 ```
-$840000-$85FFFF: Frame Buffer 0 (128KB)
-$860000-$87FFFF: Frame Buffer 1 (128KB)
+$840000-$85FFFF: Frame Buffer (128KB, draw/display selected by FS bit)
+$860000-$87FFFF: Overwrite Image (128KB, same physical DRAM, alternate access mode)
 
-Each frame buffer:
-$xx0000-$xx01FF: Line Table (256 × 16-bit offsets)
-$xx0200-$xxFFFF: Pixel Data
+Note: Both physical frame buffers (DRAM0/DRAM1) are accessed through $840000.
+The FS bit in VDP FBCTL ($A1518A bit 0) selects which DRAM is display vs. draw.
+68K sees only the draw buffer at $840000 (requires FM=0).
+
+Frame buffer layout:
+$840000-$8401FF: Line Table (256 × 16-bit offsets)
+$840200-$85FFFF: Pixel Data
 ```
 
 ### Line Table Entry (✅ Confirmed)
@@ -293,18 +300,18 @@ Bits 4-0:   Red (0-31)
 | $A1512C | COMM6 | 16-bit | Response 3 |
 | $A1512E | COMM7 | 16-bit | Response 4 |
 
-**SH2 Side ($20004020-$2000403F):**
+**SH2 Side ($20004020-$2000402F):**
 
 | Address | Register | Original Game (📋 Inferred) | v2.3 Protocol (✅ Validated) |
 |---------|----------|----------------------------|------------------------------|
 | $20004020 | COMM0 | 68K→SH2 command (RENDER_FRAME=0x0001) | *unchanged* |
-| $20004024 | COMM1 | Display list address | *unchanged* |
-| $20004028 | COMM2 | Work status flags | *unchanged* |
-| $2000402C | COMM3 | Slave writes "OVRN" in idle loop | *unchanged* |
-| $20004030 | COMM4 | *Unused by original* | **Slave frame counter** |
-| $20004034 | COMM5 | *Unused* | *unused* |
-| $20004038 | COMM6 | *Unused by original* | **Master→Slave signal** (0x0012=work) |
-| $2000403C | COMM7 | *Unused* | *unused* |
+| $20004022 | COMM1 | Display list address | *unchanged* |
+| $20004024 | COMM2 | Work status flags | *unchanged* |
+| $20004026 | COMM3 | Slave writes "OVRN" in idle loop | *unchanged* |
+| $20004028 | COMM4 | *Unused by original* | **Slave frame counter** |
+| $2000402A | COMM5 | *Unused* | *unused* |
+| $2000402C | COMM6 | *Unused by original* | **Master→Slave signal** (0x0012=work) |
+| $2000402E | COMM7 | *Unused* | *unused* |
 
 ### Original Protocol Flow (📋 Inferred)
 
@@ -485,7 +492,7 @@ Render path is NOT selected by a "polygon type" byte. Instead:
 
 | Property | Value |
 |----------|-------|
-| SDRAM Address | $060048D0 (PicoDrive) / $020048D0 (hardware) |
+| SDRAM Address | $060048D0 (cached) / $260048D0 (cache-through) |
 | ROM Offset | $0248D0 |
 | Size | 256 entries (512 bytes) |
 | Format | 0.14 unsigned fixed-point |

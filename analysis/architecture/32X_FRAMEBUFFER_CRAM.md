@@ -90,7 +90,7 @@ Bit:  15   14 13 12 11 10   9  8  7  6  5   4  3  2  1  0
 ### CRAM Access Control
 
 **PEN Bit (Palette Enable):**
-- Located in Frame Buffer Control Register (`$A15180`)
+- Located in Frame Buffer Control Register (`$A1518A`)
 - **PEN=1**: CRAM accessible
 - **PEN=0**: CRAM access waits until PEN=1 (hardware blocks CPU)
 
@@ -109,34 +109,35 @@ Bit:  15   14 13 12 11 10   9  8  7  6  5   4  3  2  1  0
 
 ## Frame Buffer Access Protocol (FM Bit)
 
-### FM Bit (Frame Buffer Mode)
+### FM Bit (VDP Access Authorization)
 
-**Location:** `$A15100` (Adapter Control Register), bit 7
+**Location:** `$A15100` (Adapter Control Register), bit 15 (68K side); `$20004000` (Interrupt Mask Register), bit 15 (SH2 side)
 
 **States:**
-- **FM=0**: 68K has frame buffer access (68K can read/write FBs)
-- **FM=1**: SH2 has frame buffer access (68K reads return garbage)
+- **FM=0**: 68K has VDP access (frame buffer, overwrite images, VDP registers, color palette)
+- **FM=1**: SH2 has VDP access (68K reads return undefined, writes ignored)
 
 **Protocol (from VRD fn_200_036-041):**
 ```asm
-; Claim 68K access
-BCLR    #7,$A15100              ; FM=0 (68K gets frame buffer)
+; Claim 68K access (byte access to high byte of $A15100)
+BCLR    #7,$A15100              ; FM=0 (68K gets VDP access)
+                                ; Note: bit 15 of word = bit 7 of high byte
 
 ; ... perform frame buffer operations ...
 
 ; Return access to SH2
-BSET    #7,$A15100              ; FM=1 (SH2 gets frame buffer)
+BSET    #7,$A15100              ; FM=1 (SH2 gets VDP access)
 ```
 
 **Critical Timing Issue:**
-- Writing FM=1 **immediately preempts** any ongoing 68K VDP access
+- Writing FM=1 from SH2 **immediately preempts** any ongoing 68K VDP access
 - Mid-transfer corruption possible if FM switched during active 68K operation
 - **Best Practice**: Only switch FM during V-Blank when VDP is idle
 
 **Safe FM State Management:**
 ```asm
-; Save current FM state
-BTST    #7,$A15100              ; Test FM bit, result in Z flag
+; Save current FM state (byte access to high byte)
+BTST    #7,$A15100              ; Test FM bit (bit 15 of word = bit 7 of high byte)
 SNE     D0                      ; D0.B = $FF if FM was 1, $00 if 0
 BCLR    #7,$A15100              ; FM=0 (claim access)
 
@@ -162,6 +163,8 @@ BSET    #7,$A15100              ; Yes, restore to 1
 - **FS=1**: VDP displays FB1 ($860000)
 
 **Key Misconception:** FS does NOT remap which buffer is at which address. FB0 is always at `$840000` and FB1 is always at `$860000` from the 68K's perspective. FS only controls which one is **visible on screen**.
+
+**Swap Timing:** Writing the FS bit is always allowed, but the actual swap only takes effect during V-Blank (VBLK=1) or in Blank mode. If written during active display, the swap is deferred to the next V-Blank. After swapping, access the frame buffer only after confirming VBLK=1 or that the FS bit has changed.
 
 **VRD Usage (fn_200_041):**
 ```asm

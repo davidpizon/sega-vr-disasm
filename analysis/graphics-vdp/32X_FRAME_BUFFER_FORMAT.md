@@ -27,10 +27,8 @@ The Sega 32X uses a dual-buffer frame buffer system with four display modes. VRD
 
 | Address Range | Description |
 |---------------|-------------|
-| `$02000000` / `$22000000` | Frame Buffer (uncached, direct access) |
-| `$02020000` / `$22020000` | Overwrite Image (uncached, direct access) |
-| `$04000000` / `$24000000` | Frame Buffer (cached) |
-| `$04020000` / `$24020000` | Overwrite Image (cached) |
+| `$04000000` / `$24000000` | Frame Buffer (cached / cache-through) |
+| `$04020000` / `$24020000` | Overwrite Image (cached / cache-through) |
 | `$20004100` | VDP Registers (cache-through only) |
 | `$20004200` | Color Palette |
 
@@ -104,35 +102,35 @@ Bits 4-0: Red (5 bits, 0-31)
 
 ## Access Control (FM Bit)
 
-The **FM (Frame access Mode) bit** controls which CPU can access the frame buffer. It is located in the MARS_VDP_FBCTL register at bit 0:
+The **FM (VDP access authorization) bit** controls which CPU can access the frame buffer, overwrite images, VDP registers, and color palette. It is bit 15 of the Adapter Control Register (`$A15100`, 68K side) and bit 15 of the Interrupt Mask Register (`$20004000`, SH2 side):
 
 | Register | Bit | Value | Access |
 |----------|-----|-------|--------|
-| `$A1518A` (MARS_VDP_FBCTL) | 0 | 0 | 68K has frame buffer access |
-| `$A1518A` (MARS_VDP_FBCTL) | 0 | 1 | SH2 has frame buffer access |
+| `$A15100` (Adapter Control) | 15 | 0 | 68K has VDP access (initial value) |
+| `$A15100` (Adapter Control) | 15 | 1 | SH2 has VDP access |
 
-**CRITICAL**: Only one CPU should access the frame buffer at a time. Writes while the wrong CPU has access are ignored; reads return undefined data.
+**CRITICAL**: Only one CPU should access the frame buffer at a time. Writes while the wrong CPU has access are ignored; reads return undefined data. Writing FM=1 from SH2 **forces** access to switch to SH2 side, even if 68K VDP access is in progress.
 
 ### Access Coordination in VRD
 
 VRD coordinates FM bit via V-INT handlers:
 1. During V-blank, 68K checks COMM0 for SH2 status
-2. If SH2 is ready, 68K clears FM bit (`BCLR #0,$A1518B`)
+2. If SH2 is ready, 68K clears FM bit (`BCLR #7,$A15100`)
 3. 68K performs frame buffer operations
-4. 68K sets FM bit (`BSET #0,$A1518B`) to return access to SH2
+4. 68K sets FM bit (`BSET #7,$A15100`) to return access to SH2
 
 ---
 
 ## Frame Buffer Control Register (MARS_VDP_FBCTL)
 
-Address: `$A1518A` (68K) / `$20004108` (SH2)
+Address: `$A1518A` (68K) / `$2000410A` (SH2)
 
 | Bit | Name | R/W | Description |
 |-----|------|-----|-------------|
 | 15 | VBLK | R | V-Blank active (1 = in V-blank) |
 | 14 | HBLK | R | H-Blank active |
 | 13 | PEN | R | Palette access permitted (1 = yes) |
-| 1 | FEN | R/W | Fill enable (1 = fill in progress) |
+| 1 | FEN | R | Frame buffer authorization (0 = access approved, 1 = fill in progress) |
 | 0 | FS | R/W | Frame buffer select (0 = DRAM0, 1 = DRAM1) |
 
 ### Double Buffering
@@ -140,7 +138,7 @@ Address: `$A1518A` (68K) / `$20004108` (SH2)
 The 32X uses double buffering:
 1. One buffer is displayed (read by VDP)
 2. One buffer is drawn to (written by CPUs)
-3. FS bit swaps which is which during V-blank
+3. Writing the FS bit is always allowed, but if written during display, the actual swap is deferred to the next V-Blank. After swapping, access the frame buffer only after confirming VBLK=1 or that the FS bit has changed.
 
 ---
 
@@ -175,8 +173,8 @@ The 32X uses double buffering:
 ### Basic Write Procedure
 
 ```asm
-; 1. Check FM bit (bit 0 of MARS_VDP_FBCTL at $A1518A)
-    BTST    #0,$A1518A          ; Test FM bit
+; 1. Check FM bit (bit 15 of Adapter Control at $A15100; byte access: bit 7 of high byte)
+    BTST    #7,$A15100          ; Test FM bit
     BNE.S   skip_write          ; Skip if SH2 has access
 
 ; 2. Read line table to find pixel address

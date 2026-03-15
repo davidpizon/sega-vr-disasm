@@ -87,7 +87,7 @@ When the 32X adapter is enabled, some addresses are remapped:
 - Maps to SH2 address space $02300000-$023FFFFF
 
 **⚠️ RV BIT WARNING**: When 68000 sets RV bit = 1 for ROM→VRAM DMA, SH2 access to this ROM region **BLOCKS** until 68000 clears RV back to 0. If VRD uses ROM DMA during gameplay, critical expansion code should be copied to SDRAM ($0600_0000) at boot to avoid stalls.
-- RV bit location: Part of DREQ_CTRL register ($A15104 from 68K side)
+- RV bit location: Part of DREQ_CTRL register ($A15106 from 68K side), bit 0
 - Impact: All SH2 ROM access (0x0200_0000 - 0x023F_FFFF) waits when RV=1
 - Status: **NEEDS VERIFICATION** - check if VRD sets RV=1 during gameplay
 
@@ -171,24 +171,27 @@ Used for sound driver and Z80 program.
 │ Offset │ R/W │ Name       │ Description                         │
 ├────────┼─────┼────────────┼─────────────────────────────────────┤
 │ $5100  │ R/W │ ADAPTER    │ Adapter Control/Status              │
-│        │     │            │   Bit 7: FM (Frame Mode)            │
-│        │     │            │   Bit 1: ADEN (Adapter Enable)      │
-│        │     │            │   Bit 0: REN (ROM Enable)           │
+│        │     │            │   Bit 15: FM (Frame Mode)           │
+│        │     │            │   Bit 7: REN (SH2 Reset Enable)     │
+│        │     │            │   Bit 1: RES (SH2 Reset)            │
+│        │     │            │   Bit 0: ADEN (Adapter Enable)      │
 ├────────┼─────┼────────────┼─────────────────────────────────────┤
-│ $5101  │ R/W │ INTCTL     │ Interrupt Control                   │
-│        │     │            │   Bit 7: Adapter Ready              │
-│        │     │            │   Bit 0: VINT Pending               │
+│ $5102  │ R/W │ INTCTL     │ Interrupt Control                   │
+│        │     │            │   Bit 1: INTS (Slave SH2 INT)       │
+│        │     │            │   Bit 0: INTM (Master SH2 INT)      │
 ├────────┼─────┼────────────┼─────────────────────────────────────┤
-│ $5102  │ W   │ BANKSET    │ ROM Bank Switching                  │
+│ $5104  │ R/W │ BANKSET    │ ROM Bank Switching                  │
 ├────────┼─────┼────────────┼─────────────────────────────────────┤
-│ $5104  │ R/W │ DREQ_CTRL  │ DMA Request Control/FIFO            │
-│ $5106  │ W   │ DREQ_SRC_H │ DMA Source Address (high)           │
-│ $5108  │ W   │ DREQ_SRC_L │ DMA Source Address (low)            │
-│ $510A  │ W   │ DREQ_DST_H │ DMA Destination Address (high)      │
-│ $510C  │ W   │ DREQ_DST_L │ DMA Destination Address (low)       │
-│ $510E  │ W   │ DREQ_LEN   │ DMA Transfer Length                 │
+│ $5106  │ R/W │ DREQ_CTRL  │ DMA Request Control                 │
+│        │     │            │   Bit 7: FULL (R/O), Bit 2: 68S,    │
+│        │     │            │   Bit 0: RV (ROM to VRAM DMA)       │
+│ $5108  │ W   │ DREQ_SRC_H │ DMA Source Address (high)           │
+│ $510A  │ W   │ DREQ_SRC_L │ DMA Source Address (low)            │
+│ $510C  │ W   │ DREQ_DST_H │ DMA Destination Address (high)      │
+│ $510E  │ W   │ DREQ_DST_L │ DMA Destination Address (low)       │
+│ $5110  │ W   │ DREQ_LEN   │ DMA Transfer Length                 │
 ├────────┼─────┼────────────┼─────────────────────────────────────┤
-│ $5110  │ R/W │ FIFO_REG   │ FIFO Data Register                  │
+│ $5112  │ R/W │ FIFO_REG   │ FIFO Data Register                  │
 ├────────┼─────┼────────────┼─────────────────────────────────────┤
 │ $5120  │ R/W │ COMM0      │ Communication Register 0 (68K↔SH2)  │
 │ $5122  │ R/W │ COMM1      │ Communication Register 1            │
@@ -200,10 +203,13 @@ Used for sound driver and Z80 program.
 │ $512E  │ R/W │ COMM7      │ Communication Register 7            │
 ├────────┼─────┼────────────┼─────────────────────────────────────┤
 │ $5130  │ R/W │ PWM_CTRL   │ PWM Control Register                │
+│        │     │            │   TM/RTP: Read-Only from MD side     │
+│        │     │            │   LMD/RMD: R/W                       │
 │ $5132  │ R/W │ PWM_CYCLE  │ PWM Cycle Register                  │
-│ $5134  │ R/W │ PWM_LCHPW  │ PWM Left Channel Pulse Width        │
-│ $5136  │ R/W │ PWM_RCHPW  │ PWM Right Channel Pulse Width       │
-│ $5138  │ R/W │ PWM_MONO   │ PWM Monaural Pulse Width            │
+│ $5134  │ W   │ PWM_LCHPW  │ PWM Left Channel Pulse Width        │
+│        │     │            │   FULL/EMPTY bits: Read-Only          │
+│ $5136  │ W   │ PWM_RCHPW  │ PWM Right Channel Pulse Width       │
+│ $5138  │ W   │ PWM_MONO   │ PWM Monaural Pulse Width            │
 └────────┴─────┴────────────┴─────────────────────────────────────┘
 ```
 
@@ -257,8 +263,8 @@ Standard Sega Genesis VDP registers, plus 32X enhancements.
 │ $00000000    │ 4KB      │ SH2 Internal Cache/Work RAM           │
 │ $00001000    │ ~        │ (varies by SH2 model)                 │
 │              │          │                                       │
-│ $02000000    │ 3MB      │ Original ROM (uncached)               │
-│ $02300000    │ 1MB      │ **EXPANSION ROM** (uncached)          │
+│ $02000000    │ 3MB      │ Original ROM (cached)                 │
+│ $02300000    │ 1MB      │ **EXPANSION ROM** (cached)            │
 │ $02300050    │ 44B      │   → master_dispatch_hook              │
 │ $02300100    │ 96B      │   → vertex_transform_optimized                │
 │ $02300200    │ 76B      │   → slave_work_wrapper                │
@@ -267,24 +273,22 @@ Standard Sega Genesis VDP registers, plus 32X enhancements.
 │ $04000000    │ 256KB    │ Frame Buffer (cached)                 │
 │ $04020000    │ 256KB    │ Overwrite Image (cached)              │
 │              │          │                                       │
-│ $06000000    │ ?        │ ⚠️ UNDOCUMENTED - PicoDrive only     │
-│              │          │ Not in official hardware manual       │
-│              │          │ Use $02000000 (cached) or             │
-│              │          │ $22000000 (cache-through) instead     │
+│ $06000000    │ 256KB    │ SDRAM (cached)                        │
+│              │          │ Per hardware manual §3.1 SH2 map      │
 │              │          │                                       │
 │ $20004000    │ ~        │ 32X System Registers                  │
 │ $20004020    │ 16B      │   → COMM0-COMM7 registers             │
 │              │          │                                       │
-│ $22000000    │ 256KB    │ SDRAM (2 Mbit, cache-through)         │
+│ $22000000    │ 4MB      │ ROM Cartridge (cache-through)          │
 │ $2203E000    │ 16B      │   → **Parameter block** (R14,R7,R8,R5)|
-│ $2203FFFF    │          │ End of SDRAM                          │
+│              │          │   (project uses this addr; hw manual  │
+│              │          │    says SDRAM c/t is $2600xxxx)        │
 │              │          │                                       │
-│ $24000000    │ 128KB    │ Frame Buffer (direct access)          │
-│ $24020000    │ 128KB    │ Overwrite Image (direct access)       │
+│ $24000000    │ 128KB    │ Frame Buffer (cache-through)           │
+│ $24020000    │ 128KB    │ Overwrite Image (cache-through)        │
 │              │          │                                       │
-│ $26000000    │ ~        │ 32X Registers (SH2 view)              │
-│              │          │                                       │
-│ $60000000    │ 256KB    │ SDRAM (cached)                        │
+│ $26000000    │ 256KB    │ SDRAM (cache-through)                 │
+│ $2603FFFF    │          │ End of SDRAM                          │
 └──────────────┴──────────┴─────────────────────────────────────────┘
 ```
 
@@ -297,7 +301,7 @@ Standard Sega Genesis VDP registers, plus 32X enhancements.
 
 | Memory Region | Read | Write | Notes |
 |--------------|------|-------|-------|
-| **SDRAM** ($02000000) | 12 clocks | 2 clocks | Burst mode: 12 + 2×(n-1) for n words |
+| **SDRAM** ($06000000) | 12 clocks | 2 clocks | Burst mode: 12 + 2×(n-1) for n words |
 | **Frame Buffer** ($04000000) | 6 clocks | 3-5 clocks | 3 if FIFO not full, 5 if full |
 | **VDP Registers** ($04004100) | 5 clocks | 5 clocks | |
 | **System Registers** ($20004000) | 1 clock | 1 clock | COMM registers, interrupt control |
@@ -317,7 +321,7 @@ Standard Sega Genesis VDP registers, plus 32X enhancements.
 - **Optimization opportunity**: Write frame buffer data in 4-word (8-byte) bursts
 - **Status**: Need to profile if VRD already uses burst writes
 
-### SH2 SDRAM Usage ($22000000, 256KB)
+### SH2 SDRAM Usage ($06000000 cached / $26000000 cache-through, 256KB)
 - Primary working memory for SH2 programs
 - Used for 3D transformation matrices
 - Used for polygon data structures

@@ -165,7 +165,7 @@ Entity updates are **UNROLLED** — `race_entity_update_loop` uses repeated JSR 
 
 ### 5.1 The Problem
 
-SH2 **cannot access 68K Work RAM** (`$FF0000-$FFFFFF`). The SH2 memory map has a gap between SDRAM (`$0203FFFF`) and Frame Buffer (`$04000000`). Entity positions in Work RAM must reach the SH2 through shared memory.
+SH2 **cannot access 68K Work RAM** (`$FF0000-$FFFFFF`). The SH2 memory map has no path to 68K RAM — shared memory options are COMM registers ($20004020), SDRAM ($06000000-$0603FFFF), and Frame Buffer ($04000000). Entity positions in Work RAM must reach the SH2 through shared memory.
 
 ### 5.2 The Solution: Bulk DREQ FIFO Transfer
 

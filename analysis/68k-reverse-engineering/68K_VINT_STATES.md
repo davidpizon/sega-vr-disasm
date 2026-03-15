@@ -135,8 +135,8 @@ $16EE    15     $00882010  COMM register check
 
 **Disassembly Excerpt**:
 ```asm
-00881A82  33FC 0100 00A1 1100    MOVE.W  #$0100,COMM0    ; Send command
-00881A8A  0839 0000 00A1 1100    BTST    #0,COMM0        ; Check busy
+00881A82  33FC 0100 00A1 5120    MOVE.W  #$0100,COMM0    ; Send command
+00881A8A  0839 0000 00A1 5120    BTST    #0,COMM0        ; Check busy
 00881A92  66F6                   BNE.S   $00881A8A       ; Wait loop
 ```
 
@@ -154,26 +154,26 @@ $16EE    15     $00882010  COMM register check
 
 **Key Operations**:
 1. Check COMM0 status (SH2 busy check)
-2. Test MARS_VDP_FBCTL bit 7 (frame buffer status)
+2. Test MARS_VDP_FBCTL bit 7 (VBLK — V-Blank status)
 3. Call subroutine at `$2878` (JSR $00882878)
-4. Toggle MARS_VDP FM bit (frame buffer access control)
+4. Toggle FS bit (frame buffer swap) via MARS_VDP_FBCTL
 5. Return
 
 **Disassembly Excerpt**:
 ```asm
 00881CCA  4A39 00A1 5120         TST.B   COMM0           ; Check SH2 ready
 00881CD0  6638                   BNE.S   $00881D0A       ; Skip if busy
-00881CD2  08B9 0007 00A1 5100    BCLR    #7,MARS_SYS_INTCTL  ; Clear bit 7
-00881CDA  0839 0007 00A1 518A    BTST    #7,MARS_VDP_FBCTL   ; Test FB bit
+00881CD2  08B9 0007 00A1 5100    BCLR    #7,ADAPTER_CTRL     ; Clear FM bit (give VDP access to MD)
+00881CDA  0839 0007 00A1 518A    BTST    #7,MARS_VDP_FBCTL   ; Test VBLK bit (bit 15 of word)
 00881CE2  67F6                   BEQ.S   $00881CDA       ; Wait loop
 00881CE4  4EBA 0B92              JSR     $00882878(PC)   ; Call function
 00881CE8  0878 0000 C80C         BCHG    #0,($C80C).W    ; Toggle flag
-00881CF0  08F9 0000 00A1 518B    BSET    #0,MARS_VDP_FBCTL+1 ; Set FM bit
-00881D02  08F9 0007 00A1 5100    BSET    #7,MARS_SYS_INTCTL  ; Set bit 7
+00881CF0  08F9 0000 00A1 518B    BSET    #0,MARS_VDP_FBCTL+1 ; Set FS bit (frame buffer swap)
+00881D02  08F9 0007 00A1 5100    BSET    #7,ADAPTER_CTRL     ; Set FM bit (give VDP access to SH2)
 00881D0A  4E75                   RTS
 ```
 
-**Critical**: Frame buffer FM bit must be coordinated with V-blank to prevent visual corruption (see [68K_COMM_PROTOCOL.md#frame-buffer-access-control](68K_COMM_PROTOCOL.md#frame-buffer-access-control))
+**Critical**: FM bit (Adapter Control $A15100 bit 15) must be coordinated with V-blank to prevent visual corruption. FS bit ($A1518A bit 0) controls frame buffer swap, deferred to next V-Blank when written during display. (see [68K_COMM_PROTOCOL.md#frame-buffer-access-control](68K_COMM_PROTOCOL.md#frame-buffer-access-control))
 
 ---
 
@@ -191,8 +191,8 @@ Similar to State 5 - COMM0 wait loop, command send, acknowledge wait pattern.
 **Disassembly Excerpt**:
 ```asm
 00881ACA  3015                   MOVE.W  (A5),D0
-00881ACA  33FC 0100 00A1 1100    MOVE.W  #$0100,COMM0
-00881AD4  0839 0000 00A1 1100    BTST    #0,COMM0
+00881ACA  33FC 0100 00A1 5120    MOVE.W  #$0100,COMM0
+00881AD4  0839 0000 00A1 5120    BTST    #0,COMM0
 00881ADC  66F6                   BNE.S   $00881AD4
 ```
 
@@ -209,15 +209,15 @@ Similar to State 5 - COMM0 wait loop, command send, acknowledge wait pattern.
 **Size**: ~82 bytes
 
 **Key Operations**:
-1. Test and set MARS_VDP FM bit
+1. Set FS bit (frame buffer swap, $A1518A bit 0)
 2. Initialize palette memory at `$A15200` (CRAM)
-3. Clear 128 words (256 bytes) of palette data
+3. Copy 128 longwords (512 bytes) of palette data
 
 **Disassembly Excerpt**:
 ```asm
 00881E60  31FC 0000 C87E         MOVE.W  #$0000,($C87E).W ; Clear flag
 00881E66  0878 0000 C80C         BCHG    #0,($C80C).W     ; Toggle bit
-00881E6E  08F9 0000 00A1 518B    BSET    #0,MARS_VDP_FBCTL+1 ; Set FM
+00881E6E  08F9 0000 00A1 518B    BSET    #0,MARS_VDP_FBCTL+1 ; Set FS (frame buffer swap)
 00881E80  41F8 A100              LEA     $A100,A0         ; Base address
 00881E84  43F9 00A1 5200         LEA     $A15200,A1       ; Palette RAM
 00881E8A  707F                   MOVEQ   #$7F,D0          ; Counter = 128
@@ -226,7 +226,7 @@ Similar to State 5 - COMM0 wait loop, command send, acknowledge wait pattern.
 00881E92  4E75                   RTS
 ```
 
-**Note**: CRAM (Color RAM) at `$A15200-$A1525F` holds the 32X color palette (256 colors, RGB555 format).
+**Note**: CRAM (Color RAM) at `$A15200-$A153FF` holds the 32X color palette (256 entries, 16-bit RGB555 format, 512 bytes total).
 
 ---
 
@@ -295,26 +295,26 @@ Extended SH2 communication with additional processing steps compared to states 5
 
 **Key Operations**:
 1. COMM0/COMM1 register checks (SH2 sync)
-2. Clear frame buffer control bit
-3. Wait for VDP ready (MARS_VDP_FBCTL bit 7)
+2. Clear FM bit in Adapter Control Register ($A15100)
+3. Wait for VBLK (MARS_VDP_FBCTL bit 15 / byte bit 7)
 4. Call rendering functions (`$8848D6`, `$8848DA`)
-5. Toggle FM bit for frame buffer access
+5. Restore FM bit for SH2 VDP access
 
 **Disassembly Excerpt**:
 ```asm
 00881E94  3015                   MOVE.W  (A5),D0
-00881E9A  33FC 0100 00A1 1100    MOVE.W  #$0100,COMM0
-00881EA2  0839 0000 00A1 1100    BTST    #0,COMM0
+00881E9A  33FC 0100 00A1 5120    MOVE.W  #$0100,COMM0
+00881EA2  0839 0000 00A1 5120    BTST    #0,COMM0
 00881EA6  66F6                   BNE.S   $00881E9E       ; Wait for COMM0 clear
 00881EDC  0839 0000 00A1 5123    BTST    #0,COMM1+1      ; Check COMM1
 00881EE4  6762                   BEQ.S   $00881F48       ; Branch if clear
-00881F02  08B9 0007 00A1 5100    BCLR    #7,MARS_SYS_INTCTL
-00881F0A  0839 0007 00A1 518A    BTST    #7,MARS_VDP_FBCTL
-00881F12  67F6                   BEQ.S   $00881F0A       ; Wait for VDP
+00881F02  08B9 0007 00A1 5100    BCLR    #7,ADAPTER_CTRL     ; Clear FM bit (VDP access to MD)
+00881F0A  0839 0007 00A1 518A    BTST    #7,MARS_VDP_FBCTL   ; Test VBLK (bit 15 of word)
+00881F12  67F6                   BEQ.S   $00881F0A       ; Wait for V-Blank
 00881F18  45F9 00A1 5200         LEA     $A15200,A2      ; Palette base
 00881F1E  4EBA 29B6              JSR     $008848D6(PC)   ; Render call 1
 00881F22  4EBA 29B6              JSR     $008848DA(PC)   ; Render call 2
-00881F40  08F9 0007 00A1 5100    BSET    #7,MARS_SYS_INTCTL
+00881F40  08F9 0007 00A1 5100    BSET    #7,ADAPTER_CTRL     ; Set FM bit (VDP access to SH2)
 00881F48  4E75                   RTS
 ```
 
@@ -338,8 +338,8 @@ Similar to State 13 - COMM register sync, VDP wait loops, rendering JSR calls, F
 00881FAE  0839 0000 00A1 5123    BTST    #0,COMM1+1
 00881FB6  6756                   BEQ.S   $0088200E
 00881FC0  31FC 0000 C87E         MOVE.W  #$0000,($C87E).W
-00881FC6  08B9 0007 00A1 5100    BCLR    #7,MARS_SYS_INTCTL
-00881FCE  0839 0007 00A1 518A    BTST    #7,MARS_VDP_FBCTL
+00881FC6  08B9 0007 00A1 5100    BCLR    #7,ADAPTER_CTRL     ; Clear FM bit (VDP access to MD)
+00881FCE  0839 0007 00A1 518A    BTST    #7,MARS_VDP_FBCTL   ; Test VBLK (bit 15 of word)
 00881FD6  67F6                   BEQ.S   $00881FCE
 00881FD8  43F9 00FF 6E00         LEA     $FF6E00,A1      ; Work RAM pointer
 00881FDE  45F9 00A1 5200         LEA     $A15200,A2      ; Palette RAM
@@ -398,10 +398,10 @@ Based on code patterns, the handlers fall into several families:
 
 **Common Pattern**:
 1. Check SH2 status via COMM registers
-2. Wait for VDP ready (MARS_VDP_FBCTL bit 7)
-3. Clear/set FM bit for frame buffer access control
+2. Clear FM bit ($A15100 bit 15) to give VDP access to MD
+3. Wait for VBLK (MARS_VDP_FBCTL bit 15 / byte bit 7)
 4. Call rendering subroutines
-5. Restore FM bit
+5. Set FM bit to return VDP access to SH2
 6. Return
 
 **Purpose**: Coordinate frame buffer access between 68K and SH2, render graphics.
@@ -450,9 +450,9 @@ Based on code patterns, the handlers fall into several families:
 | COMM1 | $A15122 | 5,7,10,12,13,14,15 | Acknowledge flags |
 | COMM2 | $A15124 | - | (not directly used in state handlers) |
 | COMM4-7 | $A15128-$A1512E | - | (response data, see [68K_COMM_PROTOCOL.md](68K_COMM_PROTOCOL.md)) |
-| MARS_SYS_INTCTL | $A15100 | 6, 13, 14 | Adapter control (bit 7 operations) |
-| MARS_VDP_FBCTL | $A1518A | 6, 9, 13, 14 | Frame buffer control (FM bit, bit 7) |
-| Palette RAM | $A15200-$A1525F | 9, 13, 14 | Color palette (CRAM) |
+| Adapter Control ($A15100) | $A15100 | 6, 13, 14 | FM bit (bit 15/byte bit 7): VDP access authorization |
+| MARS_VDP_FBCTL | $A1518A | 6, 9, 13, 14 | Frame buffer control (VBLK=bit 15, FS=bit 0) |
+| Palette RAM | $A15200-$A153FF | 9, 13, 14 | Color palette (256 entries, CRAM) |
 
 ---
 
@@ -564,7 +564,7 @@ Monitor these addresses to debug state issues:
 $C87A (word)  - Current state index / VBlank flag
 $C964 (long)  - Frame counter (should increment every 16.7ms)
 $A15120 (word) - COMM0 (SH2 busy flag, should clear within ~1-2 frames)
-$A1518A (byte) - MARS_VDP_FBCTL (FM bit should toggle during render states)
+$A1518A (word) - MARS_VDP_FBCTL (VBLK=bit 15, FS=bit 0 should toggle during render states)
 ```
 
 ---
@@ -603,7 +603,7 @@ To add a custom state handler:
 1. **Keep handlers short**: V-INT time is limited (~16.7ms @ 60Hz)
 2. **Use SH2 for heavy work**: Offload 3D rendering, sound to SH2 CPUs
 3. **Preserve registers**: Save/restore D0-D7/A0-A6 if modified (V-INT already does this, but be cautious)
-4. **Coordinate FM bit**: Always check/set MARS_VDP_FBCTL when accessing frame buffer
+4. **Coordinate FM bit**: Set/clear FM in Adapter Control ($A15100 bit 15) when accessing frame buffer; check VBLK in MARS_VDP_FBCTL ($A1518A bit 15) for timing
 5. **Check COMM0 before writing**: Prevent overwriting active SH2 commands
 6. **Clear flags on exit**: Reset any RAM flags used during handler execution
 7. **Return via RTS**: Let V-INT handler manage stack and register restoration

@@ -21,7 +21,7 @@ Three CPUs run concurrently. Communication is exclusively through COMM registers
 │                           68K commands)          $27 pixel work)
 │
 │  V-INT fires every 16.67 ms (60 Hz, NTSC)
-│  Active display: ~263 scan lines ≈ 16 ms of game logic
+│  NTSC: 262 total scan lines (224 active + 38 retrace), 16.67 ms per frame
 └─────────────────────────────────────────────────────────────────┘
 
 COMM registers ($A15120–$A1512E on 68K / $20004020–$2000402E on SH2):
@@ -192,7 +192,7 @@ for completion — the Slave processes async during the display period.
     │
     └─ RTS (return immediately)
 
-Slave side (inline_slave_drain @ SDRAM $020608):
+Slave side (inline_slave_drain @ SDRAM $06000608):
     │
     ├─ Detect COMM7 != 0
     ├─ Copy COMM2:3, COMM6 to local registers
@@ -230,7 +230,7 @@ Dispatch loop (runs continuously on Master SH2):
 | COMM0_LO | Handler | Purpose |
 |----------|---------|---------|
 | `$01`    | `$060008A0` | Standard 3-phase COMM6 handler (all original game cmds) |
-| `$22`    | `$3010F0` | Expansion ROM: single-shot block copy (B-004) |
+| `$22`    | `$023010F0` | Expansion ROM: single-shot block copy (B-004) |
 | `$27`    | COMM7 path | Routed to Slave via COMM7 (B-003), NOT dispatched via Master |
 
 ### Slave SH2 Idle Loop ($06000592 / SDRAM)
@@ -242,10 +242,10 @@ pixel work). **78% utilization** — Slave is busy for most of each frame.
 Slave loop:
     │
     ├─ Poll COMM1_HI ($20004022)
-    │   ├─ Non-zero → dispatch via jump table at $0205C8
+    │   ├─ Non-zero → dispatch via jump table at $060005C8
     │   └─ Zero → fall through to COMM7 check
     │
-    ├─ Poll COMM7 ($2000402E) [inline_slave_drain @ $020608]
+    ├─ Poll COMM7 ($2000402E) [inline_slave_drain @ $06000608]
     │   ├─ Non-zero ($0027) → process cmd_27 pixel work (async)
     │   │   ├─ Read COMM2:3 (data ptr), COMM6 (dims)
     │   │   ├─ Clear COMM7 = 0 (release 68K from its wait)
