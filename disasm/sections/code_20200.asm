@@ -721,8 +721,8 @@ vdp_wait_test:                   ; $02050C
         dc.w    $1924        ; $020796
         dc.w    $0600        ; $020798
         dc.w    $1A0C        ; $02079A
-        dc.w    $0230        ; $02079C  cmd $07 → expansion ROM $023011A0 (Stage 1 visibility)
-        dc.w    $11A0        ; $02079E
+        dc.w    $0600        ; $02079C
+        dc.w    $0490        ; $02079E
         dc.w    $0600        ; $0207A0
         dc.w    $0490        ; $0207A2
         dc.w    $0600        ; $0207A4
