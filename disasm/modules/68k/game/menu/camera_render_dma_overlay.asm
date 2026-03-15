@@ -105,9 +105,11 @@ camera_render_dma_overlay:
         move.w  #$0048,D0                       ; $01343E  height = $48
         move.w  #$0010,D1                       ; $013442  width = $10
         move.w  #$0010,D2                       ; $013446  param = $10
-.wait_comm0:
-        tst.b   COMM0_HI                        ; $01344A  COMM0 busy?
-        bne.s   .wait_comm0                     ; $013450  yes → wait
+; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
+        nop                                     ; $01344A
+        nop                                     ; $01344C
+        nop                                     ; $01344E
+        nop                                     ; $013450
         jsr     sh2_cmd_27(pc)          ; $4EBA $AF60
 ; --- copy highlight palette to CRAM+$178 ---
 .copy_palette:

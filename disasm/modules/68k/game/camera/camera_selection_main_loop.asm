@@ -136,9 +136,11 @@ camera_selection_main_loop:
         DC.W    $4EBA,$B52E         ; JSR     $00E35A(PC); $012E2A ; sh2_send_cmd
         TST.L  (-24540).W                       ; $012E2E ; scrolling active?
         BNE.W  .render_overlay                  ; $012E32 ; skip cmd_27
-.wait_comm_ready:
-        TST.B  COMM0_HI                        ; $012E36 ; SH2 busy?
-        BNE.S  .wait_comm_ready                 ; $012E3C
+; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
+        NOP                                     ; $012E36
+        NOP                                     ; $012E38
+        NOP                                     ; $012E3A
+        NOP                                     ; $012E3C
         bsr.w   camera_sh2_command_27_dispatch+28; $6100 $0132 ; tile update
 ; --- Render UI overlay panel ---
 .render_overlay:
