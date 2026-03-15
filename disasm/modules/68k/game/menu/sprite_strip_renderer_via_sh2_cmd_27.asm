@@ -29,11 +29,9 @@ sprite_strip_renderer_via_sh2_cmd_27:
         MOVE.W  #$0050,D0                       ; $014216
         MOVE.W  #$0007,D1                       ; $01421A
         MOVE.W  #$003C,D2                       ; $01421E
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $014222
-        NOP                                     ; $014224
-        NOP                                     ; $014226
-        NOP                                     ; $014228
+.wait_first_row:
+        TST.B  COMM0_HI                        ; $014222
+        BNE.S  .wait_first_row                        ; $014228
         jsr     sh2_cmd_27(pc)          ; $4EBA $A188
         SUB.W   D4,D3                           ; $01422E
         BCS.W  .done                        ; $014230
@@ -47,11 +45,9 @@ sprite_strip_renderer_via_sh2_cmd_27:
         MOVE.W  #$0050,D0                       ; $014242
         MOVE.W  #$0007,D1                       ; $014246
         MOVE.W  #$0040,D2                       ; $01424A
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $01424E
-        NOP                                     ; $014250
-        NOP                                     ; $014252
-        NOP                                     ; $014254
+.wait_next_row:
+        TST.B  COMM0_HI                        ; $01424E
+        BNE.S  .wait_next_row                        ; $014254
         jsr     sh2_cmd_27(pc)          ; $4EBA $A15C
         ADDQ.W  #1,D4                           ; $01425A
         DBRA    D3,.next_row                    ; $01425C

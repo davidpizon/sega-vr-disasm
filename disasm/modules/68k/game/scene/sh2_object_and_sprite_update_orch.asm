@@ -120,11 +120,9 @@ sh2_object_and_sprite_update_orch:
         MOVE.W  $04(A1,D0.W),D0                 ; $00DDEC ; tile param
         MOVE.W  #$0030,D1                       ; $00DDF0 ; width = 48
         MOVE.W  #$0010,D2                       ; $00DDF4 ; height = 16
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00DDF8
-        NOP                                     ; $00DDFA
-        NOP                                     ; $00DDFC
-        NOP                                     ; $00DDFE
+.wait_comm_ready_2:
+        TST.B  COMM0_HI                        ; $00DDF8 ; SH2 busy?
+        BNE.S  .wait_comm_ready_2               ; $00DDFE
         bsr.w   sh2_cmd_27              ; $6100 $05B2 ; send tile cmd
 ; --- Frame timing + exit state machine ---
         MOVE.W  #$0018,$00FF0008                ; $00DE04 ; V-INT period = 24

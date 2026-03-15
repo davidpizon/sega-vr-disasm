@@ -56,11 +56,9 @@ sh2_dual_screen_object_update_orch:
         MOVE.W  #$0120,D0                       ; $00DF0C
         MOVE.W  #$0010,D1                       ; $00DF10
         DC.W    $6100,$0444         ; BSR.W  $00E35A; $00DF14
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00DF18
-        NOP                                     ; $00DF1A
-        NOP                                     ; $00DF1C
-        NOP                                     ; $00DF1E
+.wait_comm_ready_2:
+        TST.B  COMM0_HI                        ; $00DF18
+        BNE.S  .wait_comm_ready_2               ; $00DF1E
         bsr.w   sh2_cmd_27_sprite_render; $6100 $01F6
         MOVEA.L #$0603DA00,A0                   ; $00DF24
         MOVEA.L #$2401AC88,A1                   ; $00DF2A

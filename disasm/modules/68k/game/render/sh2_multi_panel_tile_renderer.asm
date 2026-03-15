@@ -63,11 +63,9 @@ sh2_multi_panel_tile_renderer:
         MOVE.W  #$0060,D0                       ; $00F95A ; X offset = 96
         MOVE.W  #$0010,D1                       ; $00F95E ; width 16
         MOVE.W  #$0010,D2                       ; $00F962 ; height 16
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00F966
-        NOP                                     ; $00F968
-        NOP                                     ; $00F96A
-        NOP                                     ; $00F96C
+.p1_wait_panel2:
+        TST.B  COMM0_HI                        ; $00F966 ; wait SH2 ready
+        BNE.S  .p1_wait_panel2                  ; $00F96C
         jsr     sh2_cmd_27(pc)          ; $4EBA $EA44
         MOVE.B  (-24551).W,D0                   ; $00F972 ; get main palette idx
         BRA.S  .p1_render_comparison             ; $00F976
@@ -86,11 +84,9 @@ sh2_multi_panel_tile_renderer:
 .p1_comparison_params_ready:
         MOVE.W  #$0010,D1                       ; $00F996 ; height 16
         MOVE.W  #$0010,D2                       ; $00F99A ; tile size 16
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00F99E
-        NOP                                     ; $00F9A0
-        NOP                                     ; $00F9A2
-        NOP                                     ; $00F9A4
+.p1_wait_comparison:
+        TST.B  COMM0_HI                        ; $00F99E ; wait SH2 ready
+        BNE.S  .p1_wait_comparison               ; $00F9A4
         jsr     sh2_cmd_27(pc)          ; $4EBA $EA0C
 
 ; --- P1: Check for 3-panel mode ---
@@ -102,22 +98,18 @@ sh2_multi_panel_tile_renderer:
         MOVE.W  #$0048,D0                       ; $00F9BA ; width 72
         MOVE.W  #$0010,D1                       ; $00F9BE ; height 16
         MOVE.W  #$0010,D2                       ; $00F9C2 ; tile 16
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00F9C6
-        NOP                                     ; $00F9C8
-        NOP                                     ; $00F9CA
-        NOP                                     ; $00F9CC
+.p1_wait_panel3a:
+        TST.B  COMM0_HI                        ; $00F9C6 ; wait SH2 ready
+        BNE.S  .p1_wait_panel3a                 ; $00F9CC
         jsr     sh2_cmd_27(pc)          ; $4EBA $E9E4
 ; --- P1 panel 3b: second half of stats ---
         MOVEA.L #$04019018,A0                   ; $00F9D2 ; framebuf stats bottom
         MOVE.W  #$0078,D0                       ; $00F9D8 ; width 120
         MOVE.W  #$0010,D1                       ; $00F9DC ; height 16
         MOVE.W  #$0010,D2                       ; $00F9E0 ; tile 16
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00F9E4
-        NOP                                     ; $00F9E6
-        NOP                                     ; $00F9E8
-        NOP                                     ; $00F9EA
+.p1_wait_panel3b:
+        TST.B  COMM0_HI                        ; $00F9E4 ; wait SH2 ready
+        BNE.S  .p1_wait_panel3b                 ; $00F9EA
         jsr     sh2_cmd_27(pc)          ; $4EBA $E9C6
         MOVE.B  (-24551).W,D0                   ; $00F9F0 ; main palette idx
         BRA.S  .p1_stats_overlay                 ; $00F9F4
@@ -144,11 +136,9 @@ sh2_multi_panel_tile_renderer:
 .p1_stats_params_ready:
         MOVE.W  #$0010,D1                       ; $00FA22 ; height 16
         MOVE.W  #$0010,D2                       ; $00FA26 ; tile 16
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00FA2A
-        NOP                                     ; $00FA2C
-        NOP                                     ; $00FA2E
-        NOP                                     ; $00FA30
+.p1_wait_stats:
+        TST.B  COMM0_HI                        ; $00FA2A ; wait SH2 ready
+        BNE.S  .p1_wait_stats                   ; $00FA30
         jsr     sh2_cmd_27(pc)          ; $4EBA $E980
 
 ; =====================================================
@@ -163,11 +153,9 @@ sh2_multi_panel_tile_renderer:
         MOVE.W  #$0060,D0                       ; $00FA46 ; X offset 96
         MOVE.W  #$0010,D1                       ; $00FA4A
         MOVE.W  #$0010,D2                       ; $00FA4E
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00FA52
-        NOP                                     ; $00FA54
-        NOP                                     ; $00FA56
-        NOP                                     ; $00FA58
+.p2_wait_panel2:
+        TST.B  COMM0_HI                        ; $00FA52 ; wait SH2 ready
+        BNE.S  .p2_wait_panel2                  ; $00FA58
         jsr     sh2_cmd_27(pc)          ; $4EBA $E958
         MOVE.B  (-24550).W,D0                   ; $00FA5E ; P2 palette idx
         BRA.S  .p2_render_comparison             ; $00FA62
@@ -186,11 +174,9 @@ sh2_multi_panel_tile_renderer:
 .p2_comparison_params_ready:
         MOVE.W  #$0010,D1                       ; $00FA82
         MOVE.W  #$0010,D2                       ; $00FA86
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00FA8A
-        NOP                                     ; $00FA8C
-        NOP                                     ; $00FA8E
-        NOP                                     ; $00FA90
+.p2_wait_comparison:
+        TST.B  COMM0_HI                        ; $00FA8A ; wait SH2 ready
+        BNE.S  .p2_wait_comparison               ; $00FA90
         jsr     sh2_cmd_27(pc)          ; $4EBA $E920
 
 ; --- P2: Check 3-panel mode ---
@@ -202,22 +188,18 @@ sh2_multi_panel_tile_renderer:
         MOVE.W  #$0048,D0                       ; $00FAA6 ; width 72
         MOVE.W  #$0010,D1                       ; $00FAAA
         MOVE.W  #$0010,D2                       ; $00FAAE
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00FAB2
-        NOP                                     ; $00FAB4
-        NOP                                     ; $00FAB6
-        NOP                                     ; $00FAB8
+.p2_wait_panel3a:
+        TST.B  COMM0_HI                        ; $00FAB2 ; wait SH2 ready
+        BNE.S  .p2_wait_panel3a                 ; $00FAB8
         jsr     sh2_cmd_27(pc)          ; $4EBA $E8F8
 ; --- P2 panel 3b ---
         MOVEA.L #$040190B0,A0                   ; $00FABE ; P2 stats bottom
         MOVE.W  #$0078,D0                       ; $00FAC4 ; width 120
         MOVE.W  #$0010,D1                       ; $00FAC8
         MOVE.W  #$0010,D2                       ; $00FACC
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00FAD0
-        NOP                                     ; $00FAD2
-        NOP                                     ; $00FAD4
-        NOP                                     ; $00FAD6
+.p2_wait_panel3b:
+        TST.B  COMM0_HI                        ; $00FAD0 ; wait SH2 ready
+        BNE.S  .p2_wait_panel3b                 ; $00FAD6
         jsr     sh2_cmd_27(pc)          ; $4EBA $E8DA
         MOVE.B  (-24550).W,D0                   ; $00FADC ; P2 palette idx
         BRA.S  .p2_stats_overlay                 ; $00FAE0
@@ -243,10 +225,8 @@ sh2_multi_panel_tile_renderer:
 .p2_stats_params_ready:
         MOVE.W  #$0010,D1                       ; $00FB0E ; height 16
         MOVE.W  #$0010,D2                       ; $00FB12 ; tile 16
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        NOP                                     ; $00FB16
-        NOP                                     ; $00FB18
-        NOP                                     ; $00FB1A
-        NOP                                     ; $00FB1C
+.p2_wait_stats:
+        TST.B  COMM0_HI                        ; $00FB16 ; wait SH2 ready
+        BNE.S  .p2_wait_stats                   ; $00FB1C
         jsr     sh2_cmd_27(pc)          ; $4EBA $E894
         RTS                                     ; $00FB22

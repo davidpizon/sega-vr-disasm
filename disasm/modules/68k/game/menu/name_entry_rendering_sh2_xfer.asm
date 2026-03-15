@@ -72,11 +72,9 @@ name_entry_rendering_sh2_xfer:
         move.w  #$0060,D0                       ; $012104  size = $60 (for index 0)
 .send_cmd27_1:
         move.w  #$0010,D1                       ; $012108  width = $10
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        nop                                     ; $01210C
-        nop                                     ; $01210E
-        nop                                     ; $012110
-        nop                                     ; $012112
+.wait_comm0_1:
+        tst.b   COMM0_HI                        ; $01210C  COMM0 busy?
+        bne.s   .wait_comm0_1                   ; $012112  yes → wait
         jsr     sh2_cmd_27(pc)          ; $4EBA $C29E
 ; --- second sh2_cmd_27: ×6 table lookup ---
         moveq   #$00,D0                         ; $012118  clear D0
@@ -97,11 +95,9 @@ name_entry_rendering_sh2_xfer:
         movea.l $00(A1,D0.W),A0                 ; $012140  A0 = table[idx].source
         move.w  $04(A1,D0.W),D0                 ; $012144  D0 = table[idx].size
         move.w  #$0010,D1                       ; $012148  width = $10
-; [B-003] COMM0 poll removed — sh2_cmd_27 uses COMM7 doorbell, not COMM0
-        nop                                     ; $01214C
-        nop                                     ; $01214E
-        nop                                     ; $012150
-        nop                                     ; $012152
+.wait_comm0_2:
+        tst.b   COMM0_HI                        ; $01214C  COMM0 busy?
+        bne.s   .wait_comm0_2                   ; $012152  yes → wait
         jsr     sh2_cmd_27(pc)          ; $4EBA $C25E
 ; --- COMM protocol: cmd $2C ---
 .wait_comm0_3:
