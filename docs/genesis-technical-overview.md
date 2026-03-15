@@ -456,9 +456,9 @@ $C00004 and $C00006 are functionally equivalent.
 | D6   | SOVR | 1: Sprite overflow occurred, too many in one line (over 17 in 32-cell mode, over 21 in 40-cell mode) |
 | D5   | C    | 1: Collision happened between non-zero pixels in two sprites |
 | D4   | ODD  | 1: Odd frame in interlace mode, 0: Even frame in interlace mode |
-| D3   | VB   | 1: During V blanking |
-| D2   | HB   | 1: During H blanking |
-| D1   | DMA  | 1: DMA BUSY |
+| D3   | DMA  | 1: DMA BUSY |
+| D2   | VB   | 1: During V blanking |
+| D1   | HB   | 1: During H blanking |
 | D0   | PAL  | 1: PAL MODE, 0: NTSC MODE |
 
 **WRITE1: Register Set**
@@ -833,7 +833,7 @@ VRAM address range from 0 to 0FFFFh, 64K bytes total.
 $C00004   [A7] [A6] [A5] [A4] [A3] [A2] [A1] [A0]         (D7 ~ D0)
 
 2nd       [0] [0] [0] [0] [0] [0] [0] [0]                  (D15 ~ D8)
-$C00004   [C] [0] [0] [0] [0] [A15] [A14]                  (D7 ~ D0)
+$C00004   [C] [0] [0] [0] [0] [0] [A15] [A14]              (D7 ~ D0)
 
 A15 ~ A0 : VRAM address
 
@@ -858,7 +858,7 @@ The CRAM address decode uses A15~A1, and A0 specifies the data write format. Wri
 $C00004   [A7] [A6] [A5] [A4] [A3] [A2] [A1] [A0]         (D7 ~ D0)
 
 2nd       [0] [0] [0] [0] [0] [0] [0] [0]                  (D15 ~ D8)
-$C00004   [0] [0] [0] [0] [0] [A15] [A14]                  (D7 ~ D0)
+$C00004   [0] [0] [0] [0] [0] [0] [A15] [A14]              (D7 ~ D0)
 ```
 
 Data is always read in word units. A0 is ignored during the read; no swap of bytes occurs if A0=1. Subsequent reads are from address incremented by REGISTER #15. A0 is used in calculation of the next address.
@@ -882,7 +882,7 @@ A6 ~ A0 : VRAM address
 **CRAM Data format (write):**
 
 ```
-$C00000   [0] [0] [0] [B2] [B1] [B0] [0]                  (D15 ~ D8)
+$C00000   [0] [0] [0] [0] [B2] [B1] [B0] [0]              (D15 ~ D8)
           [G2] [G1] [G0] [0] [R2] [R1] [R0] [0]           (D7 ~ D0)
 ```
 
@@ -958,7 +958,7 @@ M3: Register #0
 **Non Interlace Mode:**
 
 ```
-$C00008:  [VC7] [VC6] [VC5] [VC4] [VC3] [VC2] [VC1] [VC8]   (D15 ~ D8)
+$C00008:  [VC7] [VC6] [VC5] [VC4] [VC3] [VC2] [VC1] [VC0]   (D15 ~ D8)
           [HC8] [HC7] [HC6] [HC5] [HC4] [HC3] [HC2] [HC1]   (D7 ~ D0)
 ```
 
@@ -1222,9 +1222,9 @@ INC7 ~ INC0 : Increment No.
 
 **STATUS Register:**
 
-| F | SOVR | C | ODD | VB | * | HB | DMA | PAL |
-|---|------|---|-----|----|----|----|----|-----|
-| | | | | | | |EMPT|FULL|
+| * | * | * | * | * | * | EMPT | FULL | (D15 ~ D8)
+|---|---|---|---|---|---|------|------|
+| F | SOVR | C | ODD | DMA | VB | HB | PAL | (D7 ~ D0)
 
 DMA : 1: DMA BUSY
 
@@ -2910,9 +2910,9 @@ To write to units in Part I, write the 8-bit address to 4000 and the data to 400
 
 **READ DATA:** Reading from any of the four locations:
 
-| D7 | D6-D3 | D1 | D0 |
+| D7 | D6-D2 | D1 | D0 |
 |----|-------|-----|-----|
-| BUSY | X X X X | OVERFLOW A | OVERFLOW B |
+| BUSY | X X X X X | OVERFLOW A | OVERFLOW B |
 
 - BUSY - 1 if busy, 0 if ready for new data
 - OVERFLOW - 1 if the timer has counted up and overflowed. See register 27H.

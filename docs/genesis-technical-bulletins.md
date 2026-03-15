@@ -716,7 +716,7 @@ Sound output stops during a game.
 
 **Problem:**
 
-The busy flag was read in the FM sound generator YM2616 like this (address 4001h):
+The busy flag was read in the FM sound generator YM2616 like this (address 4001h)
 
 ```
 (CS,RD,WR,A1,A0) = (0,0,1,0,1)
@@ -1207,19 +1207,19 @@ When making distinctions between application hardware information (`$A10001`) an
 |---|---|---|---|---|
 | 0 | x | x | x | x |
 | 1 | O | x | x | x |
-| 2 | x | x | x | x |
+| 2 | x | O | x | x |
 | 3 | O | O | x | x |
 | 4 | x | x | O | x |
 | 5 | O | x | O | x |
-| 6 | x | x | x | x |
-| 7 | O | O | x | x |
-| 8 | x | x | x | x |
-| 9 | O | x | x | x |
-| A | x | x | x | x |
-| B | x | x | x | x |
+| 6 | x | O | O | x |
+| 7 | O | O | O | x |
+| 8 | x | x | x | O |
+| 9 | O | x | x | O |
+| A | x | O | x | O |
+| B | O | O | x | O |
 | C | x | x | O | O |
 | D | O | x | O | O |
-| E | x | x | O | O |
+| E | x | O | O | O |
 | F | O | O | O | O |
 
 O: Operates, x: Does not operate
@@ -1360,7 +1360,7 @@ Please note that the following items are not detected as errors:
 | `$A11000`-`$A11FFF` | ControlS | | |
 | `$A12000`-`$A130EB` | SEGA Reserved | | |
 | `$A130EC`-`$A130EF` | S32X ID | Read Only | Byte/Word |
-| `$A130F0`-`$A12FFF` | Bank | R/W | Byte/- |
+| `$A130F0`-`$A130FF` | Bank | R/W | Byte/- |
 | `$A13000`-`$A13FFF` | SEGA Reserved | | |
 | `$A14000`-`$A1400F` | Security | Write Only | -/Word |
 | `$A14010`-`$A150FF` | SEGA Reserved | | |

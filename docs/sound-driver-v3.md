@@ -12,7 +12,7 @@ SEGA Enterprises, Ltd.
 
 ## Introduction
 
-The 68000 Sound Driver Version 3.00 (hereinafter "V3") is designed to fully exploit the sound source that is incorporated into the SUPER32X.
+The 68000 Sound Driver Version 3.03 (hereinafter "V3") is designed to fully exploit the sound source that is incorporated into the SUPER32X.
 
 ---
 
@@ -29,7 +29,7 @@ The 68000 Sound Driver Version 3.00 (hereinafter "V3") is designed to fully expl
 
 | Resource | Value |
 |----------|-------|
-| **Driver size (68000)** | Approximately 3000H (including Z80 driver (*1)) |
+| **Driver size (68000)** | Approximately 3000H (including a Z80 driver (*1)) |
 | **Work size** | Approximately 0B00H |
 | **CPU load (68000) - IDLE** | Approximately 1% |
 | **CPU load (68000) - Music playing** | Approximately 9% |
@@ -47,14 +47,14 @@ The 68000 Sound Driver Version 3.00 (hereinafter "V3") is designed to fully expl
 
 - A software envelope is provided as a PSG
 - Two types of software vibrato functions are provided as an FM/PSG
-- These resources endow the sound sources with the same "look and feel"
+- These resources endow all sound sources with the same "look and feel"
 - A drum kit can be created as an FM sound source
 
 ---
 
 ## Activating the Sound Driver
 
-The following procedures are used to control the Sound Driver:
+The following procedures are used to control the V3:
 
 1. **Use a system call** (described later)
 2. **Call the starting address** (at each V-INT, approximately 16 ms)
@@ -108,7 +108,8 @@ The Sound Driver operates under the following memory map:
 ```
 ┌─────────────────────────────────────────────┐
 │ Common work space                           │
-│ [60-70H (varies with number of PCM sounds)] │
+│ [60-70H (varies with the number of PCM      │
+│  sounds generated)]                         │
 ├─────────────────────────────────────────────┤
 │ Channel work space                          │
 │ [60H × channels (for all music and SE)]     │
@@ -135,8 +136,8 @@ The Driver is filled with the following information at a distance of **0CH** fro
 | +0DH | Total number of tracks | 1 byte |
 | +0EH | Total number of tracks per music | 1 byte |
 | +0FH | Total number of tracks per SE | 1 byte |
-| +10H | Driver version number | 1 byte |
-| +11H | Reserved | 6 bytes |
+| +10H | Driver version number | 6 bytes |
+| +16H | Driver type | Undefined |
 
 ---
 
@@ -156,24 +157,24 @@ Although it is possible to control the driver by directly rewriting the work spa
 
 | Number | Operation | Input Register | Output Register | Destroyed Register |
 |--------|-----------|----------------|-----------------|-------------------|
-| **00H** | Initialize Sound work space and hardware | DO.b, DL.b | - | - |
-| **01H** | Request music | DO.b, DL.b | - | DO/AO |
-| **02H** | Request SE | DO.b, DL.b | - | DO/AO |
-| **03H** | Set fade-in/out | DO.b, DL.w | - | - |
-| **04H** | Set music master volume | DO.b, DL.b | - | - |
-| **05H** | Set SE master volume | DO.b, DL.b | - | - |
-| **06H** | Set music master transpose | DO.b, DL.b | - | - |
-| **07H** | Set SE master transpose | DO.b, DL.b | - | - |
+| **00H** | Initialize Sound work space and hardware | DO.b, D1.b | - | - |
+| **01H** | Request music | DO.b, D1.b | - | DO/AO |
+| **02H** | Request SE | DO.b, D1.b | - | DO/AO |
+| **03H** | Set fade-in/out | DO.b, D1.w | - | - |
+| **04H** | Set music master volume | DO.b, D1.b | - | - |
+| **05H** | Set SE master volume | DO.b, D1.b | - | - |
+| **06H** | Set music master transpose | DO.b, D1.b | - | - |
+| **07H** | Set SE master transpose | DO.b, D1.b | - | - |
 | **08H** | Set pause | DO.b | - | - |
 | **09H** | Reset pause | DO.b | - | - |
-| **0AH** | Write communication data | DO.b, DL.b | - | - |
-| **0BH** | Read communication data | DO.b | DL.b | - |
+| **0AH** | Write communication data | DO.b, D1.b | - | - |
+| **0BH** | Read communication data | DO.b | D1.b | - |
 | **0CH** | Request to stop music | DO.b | - | DO/AO/A2 |
 | **0DH** | Request to stop SE | DO.b | - | - |
 
 ---
 
-## System Call Details
+## Details on System Calls
 
 ### 00H - Initialize Sound Driver
 
@@ -181,9 +182,9 @@ Although it is possible to control the driver by directly rewriting the work spa
 
 **Input:**
 - `DO.b` = 00H
-- `DL.b` = Sets NTSC/PAL
+- `D1.b` = Sets NTSC/PAL
   - `0` = Sets to NTSC
-  - `2` = Sets to PAL
+  - `1` = Sets to PAL
 
 **Output:** None
 
@@ -195,7 +196,7 @@ Although it is possible to control the driver by directly rewriting the work spa
 
 **Input:**
 - `DO.b` = 01H
-- `DL.b` = Piece number
+- `D1.b` = Piece number
 
 **Output:** None
 
@@ -209,7 +210,7 @@ Although it is possible to control the driver by directly rewriting the work spa
 
 **Input:**
 - `DO.b` = 02H
-- `DL.b` = SE number
+- `D1.b` = SE number
 
 **Output:** None
 
@@ -223,7 +224,7 @@ Although it is possible to control the driver by directly rewriting the work spa
 
 **Input:**
 - `DO.b` = 03H
-- `DL.w` = Fade value
+- `D1.w` = Fade value
 
 **Fade Value Format:**
 ```
@@ -236,7 +237,7 @@ Bits  7-0: Fading speed
 **Destruction:** None
 
 **Remarks:**
-- Fade-in operations can be performed by setting the fading depth to a negative number (2's complement)
+- Fade-in operators can be performed by setting the fading depth to a negative number (2's complement)
 - Allowable range of fading speed: 00H-7FH (in units of V-int)
 
 ### 04H - Set Master Music Volume
@@ -245,7 +246,7 @@ Bits  7-0: Fading speed
 
 **Input:**
 - `DO.b` = 04H
-- `DL.b` = Volume
+- `D1.b` = Volume
 
 **Output:** None
 
@@ -259,7 +260,7 @@ Bits  7-0: Fading speed
 
 **Input:**
 - `DO.b` = 05H
-- `DL.b` = Volume
+- `D1.b` = Volume
 
 **Output:** None
 
@@ -273,7 +274,7 @@ Bits  7-0: Fading speed
 
 **Input:**
 - `DO.b` = 06H
-- `DL.b` = Transposition value
+- `D1.b` = Transposition value
 
 **Output:** None
 
@@ -287,7 +288,7 @@ Bits  7-0: Fading speed
 
 **Input:**
 - `DO.b` = 07H
-- `DL.b` = Transposition value
+- `D1.b` = Transposition value
 
 **Output:** None
 
@@ -325,7 +326,7 @@ Bits  7-0: Fading speed
 
 **Input:**
 - `DO.b` = 0AH
-- `DL.b` = Data
+- `D1.b` = Data
 
 **Output:** None
 
@@ -341,7 +342,7 @@ Bits  7-0: Fading speed
 - `DO.b` = 0BH
 
 **Output:**
-- `DL.b` = Data
+- `D1.b` = Data
 
 **Destruction:** None
 
@@ -392,10 +393,10 @@ The following effect commands can be requested:
 |--------|-------------|--------|
 | **F0H** | Fade-in | Produces a fade-in effect |
 | **F1H** | Fade-out | Produces a fade-out effect |
-| **F2H** | Music stop | Stops the music being played |
+| **F2H** | Music | Stops the music being played |
 | **F3H** | Stopping SEs | Stops all SEs from which sounds are being produced |
 | **F4H** | Pausing | Pauses music |
-| **F5H** | Resetting pause | Resets music from a pause state |
+| **F5H** | Resetting a pause | Resets music from a pause state |
 | **F6H** | Music master transposing up | Raises the music's master transposition by a halftone |
 | **F7H** | Music master transposing down | Lowers the music's master transposition by a halftone |
 | **F8H** | SE master transposing up | Raises the SE's master transposition by a halftone |
@@ -408,9 +409,9 @@ The following effect commands can be requested:
 
 ---
 
-## Sound Data Structures
+## Sound Data
 
-This section describes the internal structure of sound data. For address specification, "address" refers to a relative address from the starting address.
+This section describes the internal structure of sound data. For address specification, the term "address" refers to a relative address from the starting address.
 
 ### Top Vector
 
@@ -427,15 +428,18 @@ A top vector stores an offset address of data (4 bytes per address):
 | +18H | Address of FM rhythm kit data |
 | +1CH | Address of FM sound source timbre data |
 
+### Address Tables
+
+An address table is contained in PCM, PWM, music, or in an SE, and in one place stores the addresses that point to those pieces of information (waveform addresses and size information in the case of PCM; tempo information and track addresses in the case of music).
+
 ### PCM Data
 
 PCM data stores addresses for PCM information. Any two-byte data relating to PCM is stored in terms of little-endian.
 
 **Structure:**
 ```
-Playback speed (simply a numerical value, not as playback rate) [1 byte]
+Playback speed (simply a Z80 weight value, not a sampling rate) [1 byte]
 Reserved by the system [1 byte]
-Reserved area [2 bytes]
 Address of the top address [4 bytes]
 Data size [2 bytes]
 ```
@@ -464,10 +468,10 @@ This field provides the data (number of required channels, etc.) necessary for p
 ```
 Number of required channels [1 byte]
 Priority [1 byte]
-Sound source ID for track (*1) [2 bytes]
-Sequence data address for track [2 bytes]
-Transpose for track [1 byte]
-Volume level for track [1 byte]
+Sound source ID for track 0 (*1) [2 bytes]
+Sequence data address for track 0 [2 bytes]
+Transpose for track 0 [1 byte]
+Volume level for track 0 [1 byte]
 ```
 
 (*1) See the section on "Identifying sound sources".
@@ -476,7 +480,7 @@ Volume level for track [1 byte]
 
 These tables require a minimum size of **100H per table** (fixed). Both data and commands are coded in numerical values.
 
-- **Vibrato data:** Expressed in 2's complements as 7FH (maximum positive) ← 00H (neutral) → 80H (maximum negative)
+- **Vibrato data:** Expressed in 2's complements as 7FH (maximum positive) ← 00H (neutral) → 83H (maximum negative)
 - **Envelope data:** Only values 00H-7FH can be used
 
 **Commands (80H-84H):**
@@ -521,7 +525,7 @@ FM sound source timbre data is in a partially packed format so that it can be wr
 
 ---
 
-## Sequence Commands
+## Details of Sequence Commands
 
 The following sequence commands can be used in music and SEs:
 
@@ -547,9 +551,9 @@ The following sequence commands can be used in music and SEs:
 
 **Function:** Requests an SE.
 
-### C2H, offset.w, byte-count, data.b, ... - Write Workspace
+### C2H, offset.w, byte-count, data.b, ... - Write Work Space
 
-**Function:** Writes a specified byte count to the offset for a specified sound workspace.
+**Function:** Writes a specified byte count to the offset for a specified sound work space.
 
 **Remarks:** The Sound Driver does not provide for malfunction that may occur as a result of using this command to rewrite the work space.
 
@@ -582,7 +586,15 @@ The following sequence commands can be used in music and SEs:
 
 **Function:** Sets the velocity.
 
-**Remarks:** Velocities are converted and added to the sound volume level.
+**Remarks:** Velocities are converted as shown below and added to the sound volume level:
+
+| Command | D0H | D1H | D2H | D3H | D4H | D5H | D6H | D7H |
+|---------|-----|-----|-----|-----|-----|-----|-----|-----|
+| **Actual value** | 3CH | 38H | 34H | 30H | 2CH | 28H | 24H | 20H |
+
+| Command | D8H | D9H | DAH | DBH | DCH | DDH | DEH | DFH |
+|---------|-----|-----|-----|-----|-----|-----|-----|-----|
+| **Actual value** | 1CH | 18H | 14H | 10H | 0CH | 08H | 04H | 00H |
 
 ### E0H, number.b - Change Timbre and Envelope
 
@@ -641,11 +653,11 @@ halftone)|  /    \
 
 **Function:** Sets the table vibrato.
 
-**Remarks:** The value specified in the number field resets the vibrato.
+**Remarks:** The 0 value specified in the number field resets the vibrato.
 
 ### E9H, switch.b - Vibrato Switch
 
-**Function:** Temporarily resets the vibrato. 0 resets, non-zero sets the vibrato.
+**Function:** Temporarily rests the vibrato. 0 resets, non-zero sets the vibrato.
 
 **Remarks:** This command is required in order to enable the commands E5H/E8H.
 
@@ -710,7 +722,7 @@ halftone)|  /    \
 
 ### F5H-F7H, count.b - Repeat Loop
 
-**Function:** Moves to an address specified by F8H-FDH, a specified number of times.
+**Function:** Moves to an address specified by FBH-FDH, a specified number of times.
 
 **Remarks:** This is a repeat function. There are three commands of this type. Consequently, a maximum of three nesting levels can be used.
 
@@ -771,14 +783,16 @@ The following ranges of data can be used as pseudo-V3:
 |------|-------|---------|
 | **Key** | 00H-7FH | For note data keys, the octave and the scale are set separately. Keys are defined according to MIDI standards. Keys that cannot be implemented in hardware (e.g., octaves 1 and 9) cannot be played correctly. |
 | **Volume** | 00H-7FH | The maximum allowable volume is 00H, the minimum 7FH. The sound sources are implemented according to their hardware specifications without the balancing of volume levels. In some sound sources, other than the FM sound source, a specified volume level cannot be produced because of hardware/software limitations. |
-| **Timbre** | - | The timbre parameter is not applicable to PCM or PWM. For PSG, a timbre is treated as a software envelope number. |
+| **Timbre** | 00H-7FH | The timbre parameter is not applicable to PCM or PWM. For PSG, a timbre is treated as a software envelope number. |
 | **Pan-pot** | 00H-7FH | The allowable range of numeric values for the pan-pot category is based on MIDI standards. This range is not applicable to sound sources (i.e., PCM and PSG) that do not have a pan-pot due to hardware/software limitations. |
-| **Address** | - | Any address that is executable by the 68000 is allowed. |
-| **Tempo** | - | This is fixed as a general rule, and cannot be modified. |
+| **Sound Driver address** | - | Any address that is executable by the 68000 is allowed. |
+| **Sound work space** | FFF000H | This is fixed as a general rule, and cannot be modified. |
 | **Maximum number of sounds produced** | 15-16 | This number varies with the particular PCM driver selected. |
 | **Number of SE tracks** | 5 | This is fixed as a general rule, and cannot be modified. |
-| **Switching between FM5 and D/A** | - | Switching between FM and DA can be performed either by not entering any data in the FM5 or by using the command EEH. |
+| **Switching between FM5 and D/A** | - | Switching between FM and DA can be performed either by not entering any data in the FM5 or by using the command $EE. |
 | **YM-2612 write-in data buffer** | 200H | This is fixed as a general rule, and cannot be modified. |
+
+*: This data is applicable only to the Driver. Not all data can be controlled by means of data that is based on the MIDI converter.
 
 ---
 

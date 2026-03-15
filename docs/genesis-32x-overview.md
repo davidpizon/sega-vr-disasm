@@ -562,7 +562,7 @@ With Write FIFO, write is possible by 3 Sclk. Because there are only two words, 
 
 ```
 D15 D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
-[FM][            Read Only              ][REN][ -- ][ -- ][RES][ADEN]
+[FM][            Read Only              ][REN][ -- ][ -- ][ -- ][ -- ][ -- ][RES][ADEN]
 ```
 
 | Bit | Name | Description |
@@ -691,7 +691,7 @@ This is an 8 word bi-directional register. Read/write is possible from both the 
 
 ```
 D15 D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
-[ -- ][ -- ][TM3][TM2][TM1][TM0][RTP][ -- ][MONO][RMD0][RMD1][LMD0][LMD1]
+[ -- ][ -- ][ -- ][ -- ][TM3][TM2][TM1][TM0][RTP][ -- ][ -- ][MONO][RMD0][RMD1][LMD0][LMD1]
 ```
 
 | Bit | Name | Description |
@@ -699,8 +699,8 @@ D15 D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
 | D0-D1 | LMD0/LMD1 | Left channel mode |
 | D2-D3 | RMD0/RMD1 | Right channel mode |
 | D4 | MONO | Sets stereo/mono. 0: stereo (initial value). 1: mono |
-| D8 | RTP | DREQ 1 occurrence enable (SH side only). 0: OFF (initial value). 1: ON |
-| D9-D12 | TM0-TM3 | Timer value |
+| D7 | RTP | DREQ 1 occurrence enable (SH side only). 0: OFF (initial value). 1: ON |
+| D8-D11 | TM0-TM3 | Timer value |
 
 When set at mono only registers used for mono are valid.
 
@@ -762,7 +762,7 @@ The set value x cyc becomes the pulse width. If writing to this register, the sa
 
 ```
 D15 D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
-[FM][            Read Only     ][ADEN][CART][HEN][ -- ][ V ][ H ][CMD][PWM]
+[FM][         Read Only        ][ADEN][CART][HEN][ -- ][ -- ][ -- ][ V ][ H ][CMD][PWM]
  ^
  delta
 ```
@@ -773,9 +773,9 @@ D15 D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
 | D1 | CMD | Command Interrupt Mask. 0: Mask (initial value). 1: Effective |
 | D2 | H | H Interrupt Mask. 0: Mask (initial value). 1: Effective |
 | D3 | V | V Interrupt Mask. 0: Mask (initial value). 1: Effective |
-| D5 | HEN | H INT approval within V Blank. 0: H INT not approved (initial value). 1: H INT approved |
-| D7 | Cart | Cartridge insert condition. 0: is inserted. 1: is not inserted |
-| D8 | ADEN | Adapter enable bit. 0: 32X use prohibited. 1: 32X use allowed |
+| D7 | HEN | H INT approval within V Blank. 0: H INT not approved (initial value). 1: H INT approved |
+| D8 | Cart | Cartridge insert condition. 0: is inserted. 1: is not inserted |
+| D9 | ADEN | Adapter enable bit. 0: 32X use prohibited. 1: 32X use allowed |
 | D15 (delta) | FM | Frame Buffer Access Permission. 0: MD (initial value). 1: SH |
 
 D0 ~ D3 have separated registers in master and slave. Switching access permission is done simultaneously to writing to the FM bit. Therefore, be aware that the MD side will switch even while accessing the VDP.
@@ -917,7 +917,7 @@ See MD side.
 
 ```
 D15  D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
-[PAL][     Read Only      ][PRI][240][ -- ][ -- ][ -- ][ M1][ M0]
+[PAL][ -- ][PRI][     Read Only      ][240][ -- ][ -- ][ -- ][ -- ][ -- ][ M1][ M0]
 ```
 
 | M1 | M0 | Mode |
@@ -929,8 +929,8 @@ D15  D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
 
 | Bit | Name | Description |
 |-----|------|-------------|
-| D6 | 240 | 240 Line Mode (Valid only when PAL). 0: 224 Line (initial value). 1: 240 Line. Changing can only be done within V Blank |
-| D7 | PRI | Screen Priority (explained later). 0: MD has priority (initial value). 1: 32X has priority. Change can be done anytime but is valid from the next line. |
+| D7 | 240 | 240 Line Mode (Valid only when PAL). 0: 224 Line (initial value). 1: 240 Line. Changing can only be done within V Blank |
+| D13 | PRI | Screen Priority (explained later). 0: MD has priority (initial value). 1: 32X has priority. Change can be done anytime but is valid from the next line. |
 | D15 | PAL | TV format. 0: PAL. 1: NTSC |
 
 #### Packed Pixel Control
@@ -979,9 +979,9 @@ Sets data to be filled. The Fill operation will begin by setting this register.
 
 ```
 D15   D14   D13  D12  D11  D10  D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
-[VBLK][HBLK][PEN][                  Read Only                   ][FEN][FS]
-                                                                   ^
-                                                                 delta
+[VBLK][HBLK][PEN][              Read Only              ][FM ][FEN][FS]
+                                                                                ^
+                                                                              delta
 ```
 
 | Bit | Name | Description |

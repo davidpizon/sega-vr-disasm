@@ -76,7 +76,7 @@ The system block diagram shows the following major components and their intercon
 - **FIFO (DMA)** handles data transfer between 68K and SH2 sides
 - **PWM (12bit)** provides sound output with Left and Right channels
 - **Communication Interface** (x2) bridges between the Genesis side and SH2 side
-- **Genesis Interface** connects to the Mega Drive/Genesis bus (CART, VA1-VA23, A0-A23, etc.)
+- **Genesis Interface** connects to the Mega Drive/Genesis bus (CART, VA1-VA23, A19-A31, etc.)
 - **1M DRAM** (x2) serves as dual frame buffers
 - **DRAM Interface** manages frame buffer access
 - **VDP Register** and **VDP** handle 32X video processing
@@ -85,7 +85,7 @@ The system block diagram shows the following major components and their intercon
 - **Sound MIX** combines Genesis and 32X audio
 - **Video MIX** combines Genesis and 32X video for final output
 - **PLL** generates the 21 MHz internal clock from the 46 MHz Genesis clock
-- Signals include: HSYNC, VSYNC, BCLK, YS, NTSC/PAL, MRES, TEST
+- Signals include: HSYNC, VSYNC, BCLK, K, YS, NTSC/PAL, MRES, TEST
 
 ---
 
@@ -492,7 +492,7 @@ Wave data converted to PWM format. Structure consists of:
 
 #### Sound/Music Composition
 
-- MIDI instrument connects to CartDev and Sound Adapter
+- MDI instrument connects to CartDev and Sound Adapter
 - CartDev connects via SCSI to Mac
 - Sound Adapter connects to Target
 
@@ -651,8 +651,8 @@ Only when FM = 0 within SYSREG can VDP REG and Palette access.
 
 ```
 D15 D14 D13 D12 D11 D10 D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
-FM  --- --- --- --- --- --- REN --- --- --- --- --- --- RES ADEN
-                            Read Only                   R/W R/W
+FM  --- --- --- --- --- --- --- REN --- --- --- --- --- RES ADEN
+                                Read Only                   R/W R/W
 ```
 
 | Bit | Name | Description |
@@ -785,8 +785,8 @@ R/W. This is an 8 word bi-directional register. Read/write is possible from both
 
 ```
 D15 D14 D13 D12 D11 D10 D9   D8   D7  D6  D5   D4    D3   D2   D1   D0
---- --- --- --- TM3  TM2  TM1  TM0  RTP --- MONO RMD0  RMD1 LMD0 LMD1
-                R/W  R/W  R/W  R/W  R/W     R/W  R/W   R/W  R/W  R/W
+--- --- --- --- TM3  TM2  TM1  TM0  RTP --- ---  MONO  RMD0 RMD1 LMD0 LMD1
+                R/W  R/W  R/W  R/W  R/W          R/W   R/W  R/W  R/W  R/W
                                      R Only
 ```
 
@@ -795,7 +795,7 @@ D15 D14 D13 D12 D11 D10 D9   D8   D7  D6  D5   D4    D3   D2   D1   D0
 | D0-D1 | LMD1/LMD0 | Left channel mode |
 | D2-D3 | RMD1/RMD0 | Right channel mode |
 | D4 | MONO | Sets stereo/mono. 0: stereo (initial value). 1: mono |
-| D6 | RTP | DREQ 1 occurrence enable (SH side only). 0: OFF (initial value). 1: ON |
+| D7 | RTP | DREQ 1 occurrence enable (SH side only). 0: OFF (initial value). 1: ON |
 | D8-D11 | TM0-TM3 | Timer interval |
 
 **Channel Mode Table (Right and Left):**
@@ -1073,7 +1073,7 @@ Note: The Auto Fill function will be explained later.
 R/W.
 
 ```
-D15  D14  D13  D12  D11  D10  D9  D8  D7  D6  D5  D4  D3  D2  D1
+D15  D14  D13  D12  D11  D10  D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
 A16  A15  A14  A13  A12  A11  A10 A9  A8  A7  A6  A5  A4  A3  A2  A1
 ```
 
@@ -1217,7 +1217,7 @@ This function fills the DRAM (Frame Buffer) with page (256 Word) units. Please b
 Auto Fill Address revises the values as shown below:
 
 ```
-D15  D14  D13  D12  D11  D10  D9  D8  D7  D6  D5  D4  D3  D2  D1
+D15  D14  D13  D12  D11  D10  D9  D8  D7  D6  D5  D4  D3  D2  D1  D0
 A16  A15  A14  A13  A12  A11  A10 A9  A8  A7  A6  A5  A4  A3  A2  A1
 |<-- Remains set -->|<-- Incremented -->|
 ```
