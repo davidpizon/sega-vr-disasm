@@ -130,9 +130,9 @@ The old model assumed 1 render per game frame. With camera interpolation, multip
 
 | Sub-phase | Status | What |
 |-----------|--------|------|
-| S-1a: 68K LOD distance culling | **DONE** (80c54fc) | Entities >1536 units from player get D5/D6=0 |
-| S-1b: Visibility bitmask comms | **DONE** (c5952c1) | 68K builds 15-bit bitmask, sends via COMM3 cmd $07 |
-| S-1c: SH2 descriptor patching | **CODE COMPLETE** | Handler at $3011A0 patches 15 flags at $0600C344 (stride $14) |
+| S-1a: 68K LOD distance culling | **REVERTED** (7d96cc2) | D5/D6 flags never read by SH2 during racing |
+| S-1b: Visibility bitmask comms | **REVERTED** (bf7964a) | Bitmask + COMM $07 overhead removed (entity descriptors unused) |
+| S-1c: SH2 descriptor patching | **DORMANT** | Handler at $3011A0 present but jump table restored to original |
 | S-1d: Profile and verify impact | **DONE — ZERO IMPACT** | 4 tests: baseline, forced-cull, cache fix, entity-loop-skip — all identical cycles |
 | S-1e: Threshold tuning | **CANCELLED** | No point tuning what has no effect |
 
@@ -155,7 +155,7 @@ Racing uses the **Huffman renderer** at `$06004AD0` (Master cmd `$23`) and a com
 - The Slave is **NOT used for polygon rendering** — it handles palette, scene commands, and cmd_27 pixel ops
 - 3D polygon rendering runs on the Master SH2
 
-**Committed code:** S-1a (LOD culling) and S-1b (bitmask communication) remain in the codebase. The vis_bitmask_handler at `$3011A0` is functional but patches unused data. These may become useful if the entity descriptors are used in other game modes (non-racing scenes).
+**Code status:** S-1a LOD culling REVERTED (distance checks removed, function stays relocated to code_1c200). S-1c bitmask builder REVERTED (orchestrator restored to pre-S-1c version, jump table $07 restored to $06000490). Handler at $3011A0 is dormant.
 
 ### S-4: Merge $C87E States 0+4 — REVERTED (2026-03-14)
 
@@ -344,6 +344,8 @@ Calling `mars_dma_xfer_vdp_fill` a second time per frame sends FIFO data to the 
 
 **Solution direction:** Requires deep SH2 reverse engineering of handler `$060008A0` and its 11 callees. Alternative: write a custom SH2 command handler in expansion ROM that reads camera updates from COMM registers and calls the render pipeline directly, bypassing the FIFO/DREQ mechanism.
 
+**A-2 WIP module bugs (camera_interpolation_60fps.asm):** The untracked WIP module has 3 known bugs that must be fixed before resuming A-2 work: (1) BSR.W displacement bug on line 123 (vasm +2 error). (2) Diagnostic garbage block-copy left in camera_avg_and_redma_60fps (sends from $06030000 instead of re-DMA). (3) state0_60fps adds block-copy + swap in state 0 that breaks the verified 40 FPS path.
+
 ### What IS Working (A-1, 40 FPS)
 
 The block-copy + frame swap infrastructure is functional. State 4 copies rendered SDRAM content to the framebuffer and the game displays at a stable ~40 FPS (confirmed smooth by visual testing). The camera snapshot + averaging pipeline works. Code relocated to `code_1c200.asm` expansion area with 7,936 bytes available.
@@ -409,7 +411,7 @@ S-1 complete ──────── C-3 (tick-rate reduction) — independent
 
 | Item | SH2 Reduction | FPS Effect | Risk | Phase |
 |------|---------------|------------|------|-------|
-| ~~S-1 (LOD entity culling)~~ | ~~15-40%~~ **0% (DEAD END)** | None | — | ~~1~~ |
+| ~~S-1 (LOD entity culling)~~ | **0% (DEAD END, REVERTED)** | None — code reverted | — | ~~1~~ |
 | **S-4 (state merge)** | 0% (saves 1 TV frame) | **30 FPS** | Low | 1 |
 | S-5 (behind-camera cull) | 5-10% additive | Headroom | Medium | 2 |
 | S-6 (coord_transform batch) | ~6% | Headroom | Medium | 2 |
@@ -450,8 +452,8 @@ These don't improve FPS (68K has spare capacity) but are low-risk code improveme
 | M-001 | STOP instruction (V-blank sync) | ~73.6M/2400 frames | 0% (freed 68K) |
 | M-002 | Insertion sort (depth_sort) | 85% reduction | 0% (freed 68K) |
 | M-003 | Longword copy (cmd_22 handler) | ~2M/2400 frames | 0% (freed 68K) |
-| S-1a | LOD distance culling (68K side) | 0 (entity descriptors unused during racing) | 0% |
-| S-1b | Visibility bitmask communication (COMM3 cmd $07) | 0 (targets unused data structures) | 0% |
+| S-1a | LOD distance culling — REVERTED (entity descriptors unused, code removed) | 0 | 0% |
+| S-1b | Visibility bitmask — REVERTED (COMM $07 overhead removed, jump table restored) | 0 | 0% |
 | S-1d | Profile and verify LOD impact (4 tests) | N/A | 0% — **proved S-1 is a dead end** |
 | **Total (68K)** | | **~84M/2400 frames** | **0% — 68K freed from 100% → 48%** |
 
@@ -476,7 +478,7 @@ Active handlers (~2 KB used):
   $300600  cmd27_queue_drain (128B) — B-003 (dormant, superseded by inline drain)
   $300700  slave_comm7_idle_check (64B) — B-003
   $3010F0  cmd22_single_shot (176B) — B-004 (longword copy + inline COMM cleanup)
-  $3011A0  vis_bitmask_handler (64B) — S-1c (entity descriptor patcher)
+  $3011A0  vis_bitmask_handler (64B) — DORMANT (S-1c reverted, JT restored)
 
 Dormant infrastructure:
   $300028  handler_frame_sync (22B)

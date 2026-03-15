@@ -27,6 +27,20 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **Key files:** `disasm/sh2/expansion/vis_bitmask_handler.asm`, `disasm/modules/68k/game/render/object_table_sprite_param_update.asm`
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) Phase 1
 
+### S-1a: LOD Distance Culling (68K Side)
+**Status:** REVERTED (2026-03-15) — D5/D6 flags never read by SH2 during racing
+**Priority:** P1 (historical)
+**What was done:** Added per-entity distance checks in `object_table_sprite_param_update` (15 entities × 2 axis checks per frame). Entities beyond 1536 units from player had D5/D6 set to 0.
+**Why reverted:** S-1d profiling proved entity descriptors at `$0600C344` are unused during racing. The D5/D6 flags were never read by the SH2 3D pipeline. Function stays relocated to code_1c200 (trampoline space reused by A-1/A-2 camera interpolation).
+**Key files:** `disasm/modules/68k/game/render/object_table_sprite_param_update.asm`
+
+### S-1c: Entity Visibility Bitmask Communication
+**Status:** REVERTED (2026-03-15) — entity descriptors unused during racing; COMM cmd $07 overhead removed
+**Priority:** P1 (historical)
+**What was done:** Added bitmask builder in `sh2_object_and_sprite_update_orch` that built 15-bit visibility bitmask and sent via COMM3 cmd $07 every frame. SH2 handler at expansion $3011A0 patched entity descriptor flags.
+**Why reverted:** S-1d profiling proved entity descriptors at `$0600C344` are unused during racing. The bitmask builder added COMM overhead to the 10.52% sh2_send_cmd hotspot for zero benefit. Jump table entry $07 at $02079C restored to original handler ($06000490). Handler at $3011A0 now dormant.
+**Key files:** `disasm/modules/68k/game/scene/sh2_object_and_sprite_update_orch.asm`, `disasm/sections/code_20200.asm`
+
 ### A-1: Camera Interpolation Rendering (40 FPS)
 **Status:** DONE (2026-03-14, b6bd487)
 **Priority:** P1
@@ -45,6 +59,7 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 2. **Re-DMA does not trigger SH2 re-render** — calling `mars_dma_xfer_vdp_fill` a second time sends data but the SH2 doesn't re-render. Corruption diagnostic confirmed zero visual effect. The SH2's render trigger mechanism inside handler `$060008A0` is not fully understood.
 **Space:** SOLVED — code relocated to `code_1c200.asm` expansion area (7,936 bytes free).
 **Key files:** `disasm/modules/68k/optimization/camera_interpolation_60fps.asm`, `disasm/sections/code_1c200.asm`
+**A-2 WIP bugs (camera_interpolation_60fps.asm):** (1) BSR.W displacement bug on line 123 — never use `bsr.w` in new code per KNOWN_ISSUES. (2) Diagnostic garbage block-copy on lines 83-93 — sends from wrong source $06030000 instead of proper re-DMA. (3) Module implements 60 FPS attempt (state0_60fps adds block-copy + swap in state 0) that breaks the verified 40 FPS path. Must be fixed before A-2 resumes.
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §A-2, [KNOWN_ISSUES.md](KNOWN_ISSUES.md) §Camera Interpolation
 
 ### S-4: Merge $C87E States 0+4 (Phase 1 — 30 FPS)
@@ -187,6 +202,8 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 
 | ID | Description | Commit | Date |
 |----|-------------|--------|------|
+| S-1a | LOD distance culling — REVERTED (entity descriptors unused during racing, S-1d) | 7d96cc2 | 2026-03-15 |
+| S-1c | Entity visibility bitmask — REVERTED (COMM cmd $07 overhead for dead data, S-1d) | bf7964a | 2026-03-15 |
 | B-005 | Single-shot cmd $25 + re-profiling — 3-phase→single-shot, decompressor wrapper at $300500, 3600-frame verified | — | 2026-03-03 |
 | B-011 | SH2 function integration — all 92 IDs verified, doc updated | — | 2026-02-28 |
 | B-013 | Fix SH2 address errors in COMM_REGISTER_USAGE_ANALYSIS.md (7 addresses corrected) | — | 2026-02-28 |

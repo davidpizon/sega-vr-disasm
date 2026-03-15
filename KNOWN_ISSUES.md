@@ -481,6 +481,12 @@ This means writing FS outside VBlank is DEFERRED to the next VBlank. Our inline 
 ### Re-DMA Does NOT Trigger SH2 Re-Render
 Calling `mars_dma_xfer_vdp_fill` a second time within the same game frame sends FIFO data to the SH2, but produces **zero visual effect**. Confirmed by corruption diagnostic: inverting camera buffer + re-DMA = no screen change. The SH2 receives the data (no hang) but does not re-render. Root cause under investigation — likely the SH2 handler's internal state prevents re-entry within the same frame.
 
+### A-2 WIP Module Bugs (camera_interpolation_60fps.asm)
+The untracked WIP module for 60 FPS rendering has 3 known bugs. DO NOT include it in the build until fixed:
+1. **BSR.W displacement bug (line 123):** `bsr.w camera_avg_and_redma_60fps` — per the "vasm BSR.W" rule above, never use `bsr.w` in new code. Fix: use `bsr.s` (target is within range).
+2. **Diagnostic garbage block-copy (lines 83-93):** `camera_avg_and_redma_60fps` sends block-copy from WRONG source `$06030000` — this was a deliberate test left in production code. Fix: replace with proper `jsr MARS_DMA_XFER_VDP_FILL`.
+3. **Breaks working 40 FPS:** `state0_60fps` adds block-copy + swap in state 0 that wasn't in the verified 40 FPS code path. The committed 40 FPS code (in code_2200.asm) only does snapshot + DMA in state 0.
+
 ### Documentation Remediation (March 2026)
 ~238 errors were found and fixed across 25 documentation files (76 in SEGA PDF transcriptions, 162 in analysis documents). The most dangerous errors:
 - DREQ register bit positions wrong (68S at bit 0 instead of bit 2)
@@ -526,3 +532,4 @@ ROM $300000-$3FFFFF (~1MB, 99.9% free) is accessible to the 68K via banking or p
 | Fully async general commands ($22/$25/$2F/$21) | Buffer aliasing: 68K overwrites shared data buffers before Slave replays COMM protocol. Menu graphics corrupt, race timer runs at wrong speed. COMM replay mechanism confirmed working (race 3D scene rendered). Infrastructure kept dormant at $301000. Needs per-call-site data dependency analysis before selective async activation. |
 | Work RAM ring buffer for SH2 queue ($FFFB00) | SH2 CANNOT access 68K Work RAM at ANY address. $02FFFB00 and $22FFFB00 are both in unmapped space (past SDRAM at $0203FFFF, before Frame Buffer at $04000000). Three attempts failed before reading the hardware manual. **Use COMM registers or SDRAM for 68K↔SH2 shared data.** |
 | Synchronous COMM offload of `angle_normalize` BSP | COMM handshake overhead (polling COMM0_HI) vastly exceeds the computation saved. The 316-byte pure-math function costs ~1,500 68K cycles/frame natively but the COMM stub added **23% of total 68K time** (69M cycles) spinning in `.wait_idle` — waiting for the Master SH2 to finish *prior* COMM commands (sh2_send_cmd copies). The BSP math itself completed fast on SH2 (0.7% in `.wait_done`). **Rule: synchronous COMM offload only works when computation time >> handshake overhead. Small, frequently-called functions (8×/frame) are anti-candidates.** SH2 handler + jump table kept dormant at $02301178 (cmd $30). Revert: 68K runs BSP natively. |
+| S-1a/S-1c entity visibility culling (full pipeline) | Entity descriptors at $0600C344 proven unused during racing (S-1d, 4 independent profiling tests). LOD distance checks + bitmask builder + COMM cmd $07 + SH2 handler all reverted. Jump table entry $07 restored to original $06000490. |
