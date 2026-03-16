@@ -180,6 +180,40 @@ A-2 BLOCKERS (researched March 16, 2026):
 
 Expansion ROM (post S-6): Free from $301490 (~1,018 KB, 99.8%)
   Active: $300500 (B-005), $300700 (B-003), $3010F0 (B-004), $3011E0 (S-6A), $301300 (S-6B)
+
+MASTER SH2 COMMAND HANDLERS (all 7 disassembled March 16, 2026):
+  $00 → $06000490: idle/no-op (just completion signal)
+  $01 → $060008A0: scene init orchestrator (10 subs: DMAC, PWM, cache, transforms, SRAM copy, entity loop, display list, finalize)
+  $02 → $06000CFC: scene orchestrator (entity loop callers)
+  $03 → $06000CC4: racing per-frame trigger (buffer clear 82KB + done)
+  $04 → $060012CC: full scene rendering (heaviest: 32 entities from $0600C800, 2-pass, COMM2 sync)
+  $05 → $06001924: racing per-frame render (22 entities, visibility cull via $0600C0C8)
+  $06 → $06001A0C: bulk DMA copy (56KB track data)
+  Jump table: $06000780 (16 entries). $07+ → $06000490 (idle).
+  Full reference: analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md
+
+HUFFMAN RENDERER (Slave SH2, $06004AD0, decoded March 16):
+  NOT a Master handler — dispatched by Slave. Reads compressed data from COMM4 pointer.
+  Writes decoded entity data to $0600C000 (NOT $0600C800 — oracle was wrong).
+  Two modes: straight store ($06004C48) or XOR/delta ($06004C5C).
+  256-entry lookup table rebuilt each invocation at $06003000.
+  Feeds into Pipeline 1 (on-chip SRAM) via entity loop at $060024DC.
+
+KEY SUBROUTINES (all traced March 16):
+  $06004448 (34B): DMAC/FIFO setup — SAR0=FIFO $20004012, sets COMM1_LO bit 1 ACK
+  $060044F6 (42B): PWM audio FIFO fill (192 samples)
+  $06004480 (14B): wait DMAC done + cache purge/enable
+  $06000DC8 (128B): entity transform pipeline (9 sub-calls, 36 entities)
+  $060022BC (240B): on-chip SRAM context init ($C0000700 region, viewport+func ptrs)
+  $060032D4 (54B): display list/viewport init (160×112 half-size, 256 entries)
+  $06004334 (52B): scene finalize (COMM2 sync, SRAM code call, FB swap ctrl)
+  $06004300 (36B): buffer clear ~82KB ($06020000-$06033000 + $0600DA00-$0600EE00)
+  $0600441C (12B): COMM2 handshake primitive (spin COMM2_HI=0, write R1)
+  $06000BBC: NOT CODE — vertex normal data table (8 cube corners ±512)
+
+HANDLER $05 VISIBILITY CULLING:
+  Reads $0600C0C8/$0600C0CA (camera view range). If either=$FFFF or equal, skips heavy render.
+  This is the game's built-in LOD/range culling — S-5/S-9 should interface here.
 ```
 
 ### SH2 Dispatch Architecture (Traced March 2026, corrected March 12)

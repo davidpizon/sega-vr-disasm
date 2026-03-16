@@ -243,15 +243,17 @@ A-1 (camera interpolation)   ✓ DONE — 40 FPS with zero physics changes
 
 **Architecture verified (March 2026):** Master SH2 = command router (0-36%), Slave SH2 = ALL 3D rendering (78%). The dual-SH2 split moves Pipeline 2's transform+cull work (29%) to Master, keeping rasterization on Slave.
 
-### S-5: Behind-Camera Culling — NEEDS RE-EVALUATION
+### S-5: Behind-Camera Culling — RE-EVALUATED (March 16, 2026)
 
-**Original design** depended on S-1 entity descriptor infrastructure, which targets unused data structures during racing. The concept (cull entities behind the camera) is sound, but the implementation needs to target the **correct data path** — either the Master cmd `$23` Huffman renderer's data at `$0600C800` or a new mechanism.
+**Architecture now understood.** Handler $05 (`$06001924`, racing per-frame render) has **built-in visibility culling** via `$0600C0C8`/`$0600C0CA` — reads two words representing camera view range, skips the heavy render path if either is `$FFFF` or both are equal. This is the correct intervention point for S-5.
 
-**Impact:** Unknown until the correct rendering data structure is understood.
+**Huffman renderer correction:** The decoder at `$06004AD0` reads from COMM4 (arbitrary address, NOT `$0600C800`) and writes decompressed data to `$0600C000`. The entity data structure at `$0600C800` (32 entries × 16B) is read by handler $04 (`$060012CC`, full scene rendering), not the Huffman path.
 
-**Risk:** Medium-High. Requires understanding how the Huffman renderer at `$06004AD0` selects which entities to render.
+**Implementation direction:** Modify the 68K to write culling data to `$0600C0C8`/`$0600C0CA` based on camera position, leveraging handler $05's existing check. Alternatively, patch the entity table at `$0600C800` (byte flags at offset +0) to disable behind-camera entities before handler $04 processes them.
 
-**Dependency:** Understanding Master cmd `$02`/`$23` data flow (new research needed).
+**Impact:** Potentially significant — if 30-50% of entities are behind camera, this directly reduces handler $05's 22-entity processing.
+
+**Risk:** Medium. Requires understanding what values at `$0600C0C8`/`$0600C0CA` mean (camera frustum bounds?).
 
 ### S-6: SH2 coord_transform Inlining — DONE (2026-03-16)
 
@@ -313,17 +315,17 @@ With Master freed from block copies (S-7), redirect it to vertex transformation.
 
 **Dependency:** S-7 (DMAC must handle copies so Master is available for compute).
 
-### S-9: Frustum Pre-Culling on 68K — NEEDS RE-EVALUATION
+### S-9: Frustum Pre-Culling on 68K — RE-EVALUATED (March 16, 2026)
 
-`frustum_cull_short` was attributed to the Slave SH2 at **12% of budget**, but the S-1d investigation revealed the Slave is NOT used for polygon rendering. The 3D pipeline runs on the **Master SH2**. The actual CPU and budget allocation for frustum culling needs re-measurement.
+**Architecture now understood.** Handler $05 already performs visibility culling via `$0600C0C8`/`$0600C0CA`. The entity data at `$0600C800` (32 entries × 16B, byte flags) is used by handler $04 for full scene rendering.
 
-**Original concept** (coarse per-entity frustum test on 68K) remains valid, but the communication mechanism must target the correct data path (Master's Huffman renderer data at `$0600C800`), not the entity descriptors at `$0600C344`.
+**Implementation direction:** 68K computes coarse per-entity frustum test, writes results to entity flags at `$0600C800` offset +0 (zero = skip). Handler $04 reads these flags — entities with flag=0 are skipped in the entity loop.
 
-**Impact:** Unknown — requires re-profiling with Master/Slave distinction.
+**Impact:** Up to 30-50% entity reduction → proportional savings in handler $04/05 processing time.
 
-**Risk:** Medium. Depends on understanding the Huffman renderer's input format.
+**Risk:** Medium. Must verify that `$0600C800` flags are not overwritten by other handlers between 68K write and handler $04 read. The Huffman decoder writes to `$0600C000` (separate region), so no aliasing risk there.
 
-**Dependency:** Understanding Master cmd `$02`/`$23` data flow (new research needed).
+**Dependency:** None — architecture fully understood.
 
 ### S-2: Reduce sh2_send_cmd Call Count (unchanged from v8.0)
 

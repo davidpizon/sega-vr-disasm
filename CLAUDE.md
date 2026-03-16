@@ -82,8 +82,9 @@ disasm/vrd.asm (entry point)
 - **Display FPS**: ~40 (camera interpolation, stable frame pacing). Game logic at 20 FPS.
 - **Master SH2**: 0-36% util (command router + block copies). **Slave SH2**: ~73% (ALL 3D rendering, the bottleneck — S-6 saved ~5%)
 - **Dual pipeline**: On-chip SRAM (1748B, self-contained, untouchable) + SDRAM cache (37% hotspot, optimization target)
-- **60 FPS blockers**: FS swap requires VBlank timing; re-DMA doesn't trigger SH2 re-render
+- **60 FPS blockers**: FS swap requires VBlank timing (only remaining blocker — re-DMA works, was misdiagnosis)
 - **Rendering**: Pipeline 1 (on-chip SRAM, 36 entities/frame) + Pipeline 2 (SDRAM cache, profiled hotspots)
+- **Master SH2 commands**: 7 active ($00-$06) — all disassembled March 2026. See [SH2_COMMAND_HANDLER_REFERENCE.md](analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md)
 
 ### Critical Constraint: Expansion ROM ($300000+)
 
@@ -112,6 +113,7 @@ disasm/vrd.asm (entry point)
 | All documentation index | [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) |
 | **ALL functions (799 entries, auto-gen)** | **[analysis/MASTER_FUNCTION_REFERENCE.md](analysis/MASTER_FUNCTION_REFERENCE.md)** |
 | **Quick address lookup (flat, ctrl+F)** | **[analysis/FUNCTION_QUICK_LOOKUP.md](analysis/FUNCTION_QUICK_LOOKUP.md)** |
+| **SH2 command handlers (all 7 decoded)** | **[analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md](analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md)** |
 | **Frame execution flow (start here)** | **[analysis/SYSTEM_EXECUTION_FLOW.md](analysis/SYSTEM_EXECUTION_FLOW.md)** |
 | **Rendering pipeline (end-to-end)** | **[analysis/RENDERING_PIPELINE.md](analysis/RENDERING_PIPELINE.md)** |
 | 68K function catalog (503+, older) | [analysis/68K_FUNCTION_REFERENCE.md](analysis/68K_FUNCTION_REFERENCE.md) |
