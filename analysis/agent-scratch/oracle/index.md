@@ -86,12 +86,22 @@
 ```
 68000:       7.67 MHz,  ~48% utilization (51.89% STOP idle — NOT the bottleneck)
 Master SH2: 23.01 MHz,  0–36% utilization (COMM dispatch at $020460 + block copies)
-Slave SH2:  23.01 MHz,  78.3% utilization over 3 TV frames (THE BOTTLENECK — 3D rendering via Huffman at $06004AD0)
-Baseline FPS: ~20-24 (S-4 achieves 30 FPS, speed compensated via S-4b)
+Slave SH2:  23.01 MHz,  78.3% utilization over 3 TV frames (THE BOTTLENECK — ALL 3D rendering)
+Baseline FPS: ~40 (camera interpolation, 2 renders/3 TV frames)
 
-CRITICAL CORRECTION (March 2026): The game is SH2-render-limited, NOT 68K-limited.
-68K has massive spare capacity (STOP instruction). Slave SH2 at ~2.35 TV frames of work
-per game frame determines the frame rate. No amount of 68K cycle reduction alone achieves 30 FPS.
+ARCHITECTURE VERIFIED (March 2026):
+  Master = command router (dispatch $06000460, boots $06000004) + block copies (cmd $22)
+  Slave = ALL 3D rendering (dispatch $06000592, boots $06002004)
+  Master signals Slave via COMM2_HI. Slave is the bottleneck.
+
+DUAL PIPELINE (March 2026):
+  Pipeline 1: On-chip SRAM ($C0000000, 1748B, self-contained, zero-wait — UNTOUCHABLE)
+    36 entities/frame, 3 batches, entry at $060024DC → JSR $C0000000
+  Pipeline 2: SDRAM cache (main_coordinator $06003024 → quad_batch → frustum_cull → coord_transform)
+    37% of Slave budget — THIS is the optimization target
+    coord_transform ($06003368): 17%, 4 call sites ($0600338C, $060033F4, $06003452, $060034CA)
+    frustum_cull ($0600350A): 12%, 2 call sites ($060034AE, $060034D2)
+    Full trace: analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md
 
 TIMING ARCHITECTURE (March 2026): ALL game timing uses fixed per-frame deltas — NO delta-time
 system exists. Frame rate changes require speed compensation at ~10 choke points in 5 core functions.

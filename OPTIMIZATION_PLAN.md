@@ -21,8 +21,8 @@ The frame rate bottleneck was bypassed by **decoupling display from game logic**
 | CPU | 40 FPS Avg | 20 FPS Baseline | Delta | Notes |
 |-----|-----------|-----------------|-------|-------|
 | **68K** | 127,986 | 127,987 | -1 | Negligible change — overhead absorbed by idle time |
-| Master SH2 | 127,061 | 125,175 | +1,886 | Slight increase from extra block copies |
-| **Slave SH2** | 299,926 | 301,047 | -1,121 | Slightly less (measurement variance) |
+| Master SH2 | 127,061 | 125,175 | +1,886 | Command router + block copies. **Verified:** dispatch at $06000460, boots from $06000004 |
+| **Slave SH2** | 299,926 | 301,047 | -1,121 | ALL 3D rendering via dispatch at $06000592. **THE bottleneck.** |
 
 **SH2 budget:** 2 renders × ~300K = ~600K cycles / 1,149K budget (3 TV frames) = **52.2%** utilization. Ample headroom for a 3rd render (60 FPS target).
 
@@ -50,6 +50,18 @@ Result: 2 swaps / 3 TV frames = 40 FPS display, 20 FPS game logic
 | Everything else | ~11% | ~32,600 | Matrix multiply, display list, etc. |
 
 **Key file:** `analysis/sh2-analysis/SH2_3D_ENGINE_DEEP_DIVE.md`
+
+### Dual Rendering Pipeline Discovery (March 2026)
+
+The Slave SH2 runs TWO separate rendering pipelines:
+
+**Pipeline 1 — On-Chip SRAM ($C0000000):** 1,748 bytes of rendering code copied to SH7604 on-chip SRAM at boot from SDRAM $0600254C. Completely self-contained (77 internal BSR calls, ZERO external SDRAM calls). Handles entity polygon rendering (36 entities/frame in 3 batches via $060024DC). Zero wait state, zero cache misses. **Cannot be further optimized.**
+
+**Pipeline 2 — SDRAM Cache:** `main_coordinator_short` ($06003024) → `quad_batch_short` → `recursive_quad` → `frustum_cull` ($0600350A, 12%) → `coord_transform` ($06003368, 17%) → `render_quad_short` → `span_filler_short` (8%). Runs from SDRAM via instruction cache. **THIS is the optimization target (37% of Slave budget).**
+
+`coord_transform` has 4 call sites: func_017 ($0600338C), func_018 alt ($060033F4), func_019 ($06003452), func_021 ($060034CA). Each redundantly loads base X/Y from context+$14/$18.
+
+Full trace: [SH2_RENDERING_ARCHITECTURE.md](analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md)
 
 ### 68K Time Breakdown (PC Profiling, March 2026)
 
@@ -229,6 +241,8 @@ A-1 (camera interpolation)   ✓ DONE — 40 FPS with zero physics changes
 
 **Purpose shifted:** 40 FPS was achieved WITHOUT SH2 optimization. SH2 reduction now provides headroom for 60 FPS (3 renders per 3 TV frames = 78% SH2 utilization target). Each percentage of SH2 reduction extends the margin for complex scenes that currently take longer than 1 TV frame.
 
+**Architecture verified (March 2026):** Master SH2 = command router (0-36%), Slave SH2 = ALL 3D rendering (78%). The dual-SH2 split moves Pipeline 2's transform+cull work (29%) to Master, keeping rasterization on Slave.
+
 ### S-5: Behind-Camera Culling — NEEDS RE-EVALUATION
 
 **Original design** depended on S-1 entity descriptor infrastructure, which targets unused data structures during racing. The concept (cull entities behind the camera) is sound, but the implementation needs to target the **correct data path** — either the Master cmd `$23` Huffman renderer's data at `$0600C800` or a new mechanism.
@@ -243,10 +257,7 @@ A-1 (camera interpolation)   ✓ DONE — 40 FPS with zero physics changes
 
 `coord_transform` is the #1 Slave SH2 hotspot at **17% of frame time** (34 bytes, called 4× per quad by `quad_batch_short` / `quad_batch_alt_short`). Each call loads base X/Y values from the rendering context, but the 4 calls per quad reload the same base values 4 times.
 
-**Implementation:** Replace 4 separate `BSR func_016` calls with a single batched function that processes all 4 vertices in one entry:
-1. Load base values (fields at +$14 and +$18) once instead of 4 times
-2. Pack all 4 output longwords in sequence
-3. Eliminates 3 BSR/RTS pairs (~8 cycles each for pipeline refill)
+**Implementation (March 2026 research):** 4 BSR call sites identified at $0600338C (func_017), $060033F4 (func_018 alt), $06003452 (func_019), $060034CA (func_021). All load context+$14 and context+$18 redundantly. Batched version in expansion ROM loads once, packs all 4 outputs. Callers use `.short` format — modifications must preserve byte count.
 
 **Savings estimate:** 3 redundant loads × 2 cycles × 800 quads + 3 BSR/RTS × 8 cycles × 800 quads = ~24,000 cycles/frame → **~6% of total Slave budget**.
 
@@ -479,6 +490,13 @@ Active handlers (~2 KB used):
   $300700  slave_comm7_idle_check (64B) — B-003
   $3010F0  cmd22_single_shot (176B) — B-004 (longword copy + inline COMM cleanup)
   $3011A0  vis_bitmask_handler (64B) — DORMANT (S-1c reverted, JT restored)
+
+  Pipeline 2 rendering functions (SDRAM, NOT expansion):
+    $06003024  main_coordinator_short — display list dispatch (BSRF)
+    $06003368  coord_transform (34B) — 17% hotspot, 4 callers
+    $0600350A  frustum_cull (12% hotspot, 2 callers)
+    $06003530  render_quad_short (edge walking)
+    $0600358A  span_filler_short (8% hotspot)
 
 Dormant infrastructure:
   $300028  handler_frame_sync (22B)

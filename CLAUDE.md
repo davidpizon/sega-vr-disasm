@@ -80,8 +80,10 @@ disasm/vrd.asm (entry point)
 - **823 68K modules** (736 fully translated, 87 with remaining dc.w — all data, not code)
 - **All SH2 functions** integrated (92 function IDs via 89 .inc files, zero remaining)
 - **Display FPS**: ~40 (camera interpolation, stable frame pacing). Game logic at 20 FPS.
-- **Master SH2**: 0-36% util. **Slave SH2**: 79% (1 render/3 TV frames). **Target**: 60 FPS
+- **Master SH2**: 0-36% util (command router + block copies). **Slave SH2**: 78% (ALL 3D rendering, the bottleneck)
+- **Dual pipeline**: On-chip SRAM (1748B, self-contained, untouchable) + SDRAM cache (37% hotspot, optimization target)
 - **60 FPS blockers**: FS swap requires VBlank timing; re-DMA doesn't trigger SH2 re-render
+- **Rendering**: Pipeline 1 (on-chip SRAM, 36 entities/frame) + Pipeline 2 (SDRAM cache, profiled hotspots)
 
 ### Critical Constraint: Expansion ROM ($300000+)
 
@@ -120,6 +122,7 @@ disasm/vrd.asm (entry point)
 | Bottleneck root cause | [analysis/ARCHITECTURAL_BOTTLENECK_ANALYSIS.md](analysis/ARCHITECTURAL_BOTTLENECK_ANALYSIS.md) |
 | SH2 3D pipeline | [analysis/sh2-analysis/SH2_3D_PIPELINE_ARCHITECTURE.md](analysis/sh2-analysis/SH2_3D_PIPELINE_ARCHITECTURE.md) |
 | **SH2 3D engine algorithms** | **[analysis/sh2-analysis/SH2_3D_ENGINE_DEEP_DIVE.md](analysis/sh2-analysis/SH2_3D_ENGINE_DEEP_DIVE.md)** |
+| **SH2 rendering architecture** | **[analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md](analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md)** |
 | SH2 translation guide | [analysis/sh2-analysis/SH2_TRANSLATION_INTEGRATION.md](analysis/sh2-analysis/SH2_TRANSLATION_INTEGRATION.md) |
 | Profiling how-to | [tools/libretro-profiling/README_68K_PC_PROFILING.md](tools/libretro-profiling/README_68K_PC_PROFILING.md) |
 
