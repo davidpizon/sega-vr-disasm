@@ -1,11 +1,15 @@
 # coord_transform Inlining Feasibility Analysis
 
 **Date**: January 2026
-**Status**: ✅ FEASIBLE for vertex_transform / ⚠️ COMPLEX for quad_helper-019
+**Updated**: March 16, 2026
+**Status**: ✅ DONE — all 4 call sites optimized (S-6)
 
-> **UPDATE (2026-01-24)**: vertex_transform was successfully optimized using the expansion ROM
-> approach. See [OPTIMIZATION_LESSONS_LEARNED.md](OPTIMIZATION_LESSONS_LEARNED.md) for
-> implementation details. The analysis below remains accurate for quad_helper/018/019.
+> **UPDATE (2026-01-24)**: vertex_transform was successfully optimized using the expansion ROM approach.
+>
+> **UPDATE (2026-03-16)**: ALL 4 call sites now optimized (S-6). quad_helper-019 state machine
+> relocated as a complete 278-byte block to expansion ROM $301300 (388 bytes after inlining).
+> 20 branch displacements recalculated programmatically. 6 JMP trampolines at original entry points.
+> The "full block relocation" approach recommended below was successfully implemented.
 
 ---
 

@@ -62,7 +62,7 @@ Build produces `build/vr_rebuild.32x`. Binary compatibility with the original RO
 
 ```
 $000000-$2FFFFF  3.0 MB  Original game (68K + SH2)
-$300000-$3FFFFF  1.0 MB  SH2 expansion space (~1KB used, 99.9% free)
+$300000-$3FFFFF  1.0 MB  SH2 expansion space (~1.5KB used, 99.9% free)
 ```
 
 ### Build Pipeline
@@ -80,7 +80,7 @@ disasm/vrd.asm (entry point)
 - **823 68K modules** (736 fully translated, 87 with remaining dc.w — all data, not code)
 - **All SH2 functions** integrated (92 function IDs via 89 .inc files, zero remaining)
 - **Display FPS**: ~40 (camera interpolation, stable frame pacing). Game logic at 20 FPS.
-- **Master SH2**: 0-36% util (command router + block copies). **Slave SH2**: 78% (ALL 3D rendering, the bottleneck)
+- **Master SH2**: 0-36% util (command router + block copies). **Slave SH2**: ~73% (ALL 3D rendering, the bottleneck — S-6 saved ~5%)
 - **Dual pipeline**: On-chip SRAM (1748B, self-contained, untouchable) + SDRAM cache (37% hotspot, optimization target)
 - **60 FPS blockers**: FS swap requires VBlank timing; re-DMA doesn't trigger SH2 re-render
 - **Rendering**: Pipeline 1 (on-chip SRAM, 36 entities/frame) + Pipeline 2 (SDRAM cache, profiled hotspots)

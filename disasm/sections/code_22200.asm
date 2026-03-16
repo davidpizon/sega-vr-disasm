@@ -1884,23 +1884,21 @@
 ; coord_transform: Coordinate Transformation Utility (34 bytes, $023368-$02338A)
 ; HOTSPOT: Called 4× per polygon (67,200 cycles/frame)
         include "sh2/generated/coord_transform.inc"
-; quad_helper: Quad Processing Helper (26 bytes, $02338A-$0233A3)
-; Calls coord_transform, loops until output byte non-zero
+; quad_helper: JMP trampoline to expansion ROM (26 bytes, $02338A-$0233A3)
+; S-6 Phase B: Redirects to relocated state machine at $301300
         include "sh2/generated/quad_helper.inc"
-; quad_batch_short: Quad Batch Processor (112 bytes: $0233A4-$023413)
-; Processes 4 vertices per quad via conditional BSR to vertex_helper_short
+; quad_batch_short: JMP trampolines to expansion ROM (112 bytes: $0233A4-$023413)
+; S-6 Phase B: Two entries → expansion $301336 (main) and $30138C (alt path)
         include "sh2/generated/quad_batch_short.inc"
-; quad_batch_alt_short: Quad Batch Alternate (starts at $023414)
-; Two entry points: $023414 (masked) and $02346A (zero mask)
-; Both process quads via conditional BSR to vertex_helper_short
+; quad_batch_alt_short: JMP trampolines to expansion ROM (starts at $023414)
+; S-6 Phase B: Three entries → expansion $3013CA, $30140A, $301440
         include "sh2/generated/quad_batch_alt_short.inc"
 ; vertex_helper_short: Vertex processor helper (starts at $0234A0)
 ; Called by quad_batch_short/quad_batch_alt_short for vertex processing loop
         include "sh2/generated/vertex_helper_short.inc"
-; vertex_transform: Original vertex transform implementation (starts at $0234C8)
-; PATCH #3 REVERTED — all expansion ROM patches disabled for clean baseline.
-; Processes vertices in a loop, calling $023368 and $02350A
-; Note: Optimized version exists at expansion ROM ($300100)
+; vertex_transform: JMP trampoline to expansion ROM (starts at $0234C8)
+; S-6: Redirects to vertex_transform_optimized at $3011E0 (coord_transform inlined)
+; Saves ~4,800 cycles/frame by eliminating BSR/RTS overhead for coord_transform
         include "sh2/generated/vertex_transform_orig.inc"
 ; ═══════════════════════════════════════════════════════════════════════════
 ; wait_ready: Wait for Ready / Hardware Sync (26 bytes, $0234EE-$023507)

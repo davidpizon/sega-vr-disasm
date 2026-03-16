@@ -44,7 +44,7 @@ Result: 2 swaps / 3 TV frames = 40 FPS display, 20 FPS game logic
 | Function | % of Slave Frame | Cycles/Frame (est.) | Role |
 |----------|-----------------|---------------------|------|
 | Rasterization (total) | **52%** | ~154,000 | Pixel writes, edge walking |
-| `coord_transform` (func_016) | **17%** | ~67,200 | Pack X/Y coords, called 4×/quad |
+| `coord_transform` (func_016) | **~12%** | ~47,200 | Pack X/Y coords — S-6 inlined at all 4 call sites (was 17%) |
 | `frustum_cull_short` (func_023) | **12%** | ~35,600 | Per-polygon visibility dispatch |
 | `span_filler_short` (func_034) | **8%** | ~24,000 | Edge interpolation |
 | Everything else | ~11% | ~32,600 | Matrix multiply, display list, etc. |
@@ -253,19 +253,26 @@ A-1 (camera interpolation)   ✓ DONE — 40 FPS with zero physics changes
 
 **Dependency:** Understanding Master cmd `$02`/`$23` data flow (new research needed).
 
-### S-6: SH2 coord_transform Batching
+### S-6: SH2 coord_transform Inlining — DONE (2026-03-16)
 
-`coord_transform` is the #1 Slave SH2 hotspot at **17% of frame time** (34 bytes, called 4× per quad by `quad_batch_short` / `quad_batch_alt_short`). Each call loads base X/Y values from the rendering context, but the 4 calls per quad reload the same base values 4 times.
+`coord_transform` was the #1 Slave SH2 hotspot at **17% of frame time** (34 bytes, called 4× per polygon from func_017, func_018 alt, func_019, func_021). Inlining at all 4 call sites eliminates BSR/RTS overhead (~6 cycles × 3,200 calls/frame = ~19,200 cycles).
 
-**Implementation (March 2026 research):** 4 BSR call sites identified at $0600338C (func_017), $060033F4 (func_018 alt), $06003452 (func_019), $060034CA (func_021). All load context+$14 and context+$18 redundantly. Batched version in expansion ROM loads once, packs all 4 outputs. Callers use `.short` format — modifications must preserve byte count.
+**Implementation:** Two phases targeting the two types of call sites:
 
-**Savings estimate:** 3 redundant loads × 2 cycles × 800 quads + 3 BSR/RTS × 8 cycles × 800 quads = ~24,000 cycles/frame → **~6% of total Slave budget**.
+| Phase | Call sites | Approach | Expansion addr | Savings |
+|-------|-----------|----------|----------------|---------|
+| A | func_021 (standalone) | Trampoline at $0234C8 → expansion $3011E0 (96B) | $3011E0 | ~4,800 cyc |
+| B | func_017-019 (state machine) | Full block relocation $02338A-$02349F → expansion $301300 (388B) | $301300 | ~14,400 cyc |
 
-**Risk:** Medium. Requires patching `quad_batch_short` and `quad_batch_alt_short` (SH2 dc.w format). Register pressure from handling 4 outputs simultaneously.
+Phase B required: 278-byte state machine block copied to expansion ROM, coord_transform inlined at 3 BSR sites (16 words each), 8 BSR-to-func_020 converted to MOV.L+JSR (shared literal pool), 20 branch displacements recalculated, 6 JMP trampolines at original entry points.
 
-**Dependency:** None (independent).
+**Savings achieved:** ~19,200 cycles/frame → **~5% of Slave budget** (coord_transform from ~17% to ~12%).
 
-**Files:** `disasm/sh2/3d_engine/coord_transform.asm`, quad_batch callers in `disasm/sh2/3d_engine/`
+**Key insight:** func_017-019 are a tightly-coupled state machine with cross-function branching and delay slot sharing. Individual call site modification is infeasible — the entire block must be relocated together (documented in `analysis/optimization/COORD_TRANSFORM_INLINING_INFEASIBILITY.md`).
+
+**Verification:** 3600-frame PicoDrive autoplay (menus + race mode), no crashes.
+
+**Files:** `disasm/sh2/expansion/coord_transform_batched.inc` (relocated state machine), trampoline .asm files in `disasm/sh2/3d_engine/`, `disasm/sections/expansion_300000.asm`
 
 ### S-7: SH2 DMAC for Block Copies
 
@@ -328,7 +335,7 @@ Currently 14 `sh2_send_cmd` calls per frame. Some may be combinable (adjacent me
 
 ```
 S-5 (behind-camera cull)     — NEEDS RE-EVALUATION (S-1 data structures unused)
-S-6 (coord_transform batch)  — independent
+S-6 (coord_transform inline)  — DONE (2026-03-16, ~5% Slave reduction)
 S-7 (DMAC block copies)      → S-8 (Master vertex transform)
 S-9 (frustum pre-cull)       — NEEDS RE-EVALUATION (must target correct rendering path)
 S-2 (reduce cmd count)       — independent

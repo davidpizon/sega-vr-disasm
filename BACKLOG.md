@@ -69,12 +69,16 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 **Lesson:** Decoupling display from game logic (Approach A) succeeded where constant patching (Approach B) failed.
 **References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-4
 
-### S-6: SH2 coord_transform Batching
-**Status:** OPEN
+### S-6: SH2 coord_transform Inlining via Expansion ROM
+**Status:** DONE (2026-03-16)
 **Priority:** P2 — SH2 headroom for 60 FPS stability
-**Why:** `coord_transform` is 17% of Slave SH2 frame time. Batching 4 per-vertex calls into 1 eliminates redundant base value loads. Estimated ~6% SH2 reduction. No longer needed for FPS target (40 FPS achieved without SH2 optimization), but provides margin for 60 FPS on complex scenes.
-**Key files:** `disasm/sh2/3d_engine/coord_transform.asm`, quad_batch callers
-**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-6
+**What:** Inlined `coord_transform` (17% of Slave budget) at all 4 call sites by relocating code to expansion ROM, eliminating BSR/RTS overhead. Two phases:
+- **Phase A:** `vertex_transform` (func_021, standalone) → expansion $3011E0 with coord_transform inlined. JMP trampoline at $0234C8. Reuses proven January 2026 POC approach.
+- **Phase B:** `quad_helper`/`quad_batch_short`/`quad_batch_alt_short` (func_017-019, tightly-coupled state machine) → entire 278-byte block relocated to expansion $301300 (388 bytes) with coord_transform inlined at 3 BSR sites and 8 BSR-to-func_020 converted to MOV.L+JSR. 20 branch displacements recalculated. 6 JMP trampolines at original entry points.
+**Savings:** ~19,200 cycles/frame (~5% Slave SH2 budget). coord_transform reduced from ~17% to ~12%.
+**Verification:** 3600-frame PicoDrive autoplay (menus + race mode), no crashes.
+**Key files:** `disasm/sh2/expansion/coord_transform_batched.inc`, `disasm/sections/expansion_300000.asm`, trampoline .asm files in `disasm/sh2/3d_engine/`
+**References:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) §S-6, [analysis/optimization/COORD_TRANSFORM_INLINING_INFEASIBILITY.md](analysis/optimization/COORD_TRANSFORM_INLINING_INFEASIBILITY.md)
 
 ---
 

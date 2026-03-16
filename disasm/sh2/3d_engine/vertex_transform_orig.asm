@@ -1,55 +1,56 @@
 /*
- * func_021: Vertex Transform Inner Loop
+ * func_021: Vertex Transform — JMP Trampoline to Expansion ROM
  * ROM File Offset: 0x234C8 - 0x234ED (38 bytes)
  * SH2 Address: 0x022234C8 - 0x022234ED
  *
- * Purpose: Inner loop of vertex transformation pipeline.
- *          Processes vertex list with flag-based large/small vertex handling.
+ * Purpose: Trampoline that redirects to the optimized version in expansion ROM
+ *          at $023011E0 (vertex_transform_optimized). The optimized version has
+ *          coord_transform (func_016) inlined, eliminating BSR/RTS overhead.
  *
- * Note: All instructions as .short to match ROM exactly.
+ * Original: BSR func_016 + vertex loop (38 bytes)
+ * Now: JMP trampoline (38 bytes, same size)
+ *
+ * Savings: ~6 cycles/call × 800 polygons = ~4,800 cycles/frame
+ *
+ * Note: R0 is safe to clobber — the optimized function's inlined
+ *       coord_transform body overwrites R0 immediately.
  */
 
 .section .text
 .p2align 1    /* 2-byte alignment for 0x234C8 start */
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * func_021: Original vertex transform inner loop
+ * func_021: JMP Trampoline → expansion ROM $023011E0
  * Entry: 0x022234C8
+ *
+ * Encoding: MOV.L @(1*4,PC),R0 → EA = ($0234CC & ~3) + 4 = $0234D0
+ *           JMP @R0 → jumps to $023011E0
+ *           NOP (delay slot)
  * ═══════════════════════════════════════════════════════════════════════════ */
 func_021:
-    .short  0x4F22                              /* $0234C8: STS.L PR,@-R15 */
-    .short  0xBF4D                              /* $0234CA: BSR func_016 */
+    .short  0xD001                              /* $0234C8: MOV.L @(1*4,PC),R0 */
+    .short  0x402B                              /* $0234CA: JMP @R0 */
     .short  0x0009                              /* $0234CC: [delay] NOP */
-
-    /* Push R7 and R8 */
-    .short  0x2F76                              /* $0234CE: MOV.L R7,@-R15 */
-    .short  0x2F86                              /* $0234D0: MOV.L R8,@-R15 */
-
-    /* Setup loop: R7 = vertex count, R8 = vertex list pointer */
-    .short  0xB01A                              /* $0234D2: BSR (setup, +52) */
-    .short  0x4F22                              /* $0234D4: [delay] STS.L PR,@-R15 */
-
-.loop:
-    .short  0x68F6                              /* $0234D6: MOV.L @R15+,R8 */
-    .short  0x67F6                              /* $0234D8: MOV.L @R15+,R7 */
-
-    /* Check vertex flag and advance pointer */
-    .short  0x8581                              /* $0234DA: MOV.W @(2,R8),R0 */
-    .short  0xC801                              /* $0234DC: TST #1,R0 */
-    .short  0x8F01                              /* $0234DE: BF/S .skip_large (+2) */
-    .short  0x7810                              /* $0234E0: [delay] ADD #16,R8 */
-.skip_large:
-    .short  0x7804                              /* $0234E2: ADD #4,R8 */
-
-    /* Loop control */
-    .short  0x4710                              /* $0234E4: DT R7 (decrement and test) */
-    .short  0x8BF2                              /* $0234E6: BF .loop (-28) */
-
-    /* Restore and return */
-    .short  0x4F26                              /* $0234E8: LDS.L @R15+,PR */
-    .short  0x000B                              /* $0234EA: RTS */
-    .short  0x0009                              /* $0234EC: [delay] NOP */
+    .short  0x0009                              /* $0234CE: NOP (alignment padding) */
+    /* Literal pool (4-byte aligned at $0234D0) */
+    .short  0x0230                              /* $0234D0: target high ($023011E0) */
+    .short  0x11E0                              /* $0234D2: target low */
+    /* Remaining space: NOP padding */
+    .short  0x0009                              /* $0234D4: NOP */
+    .short  0x0009                              /* $0234D6: NOP */
+    .short  0x0009                              /* $0234D8: NOP */
+    .short  0x0009                              /* $0234DA: NOP */
+    .short  0x0009                              /* $0234DC: NOP */
+    .short  0x0009                              /* $0234DE: NOP */
+    .short  0x0009                              /* $0234E0: NOP */
+    .short  0x0009                              /* $0234E2: NOP */
+    .short  0x0009                              /* $0234E4: NOP */
+    .short  0x0009                              /* $0234E6: NOP */
+    .short  0x0009                              /* $0234E8: NOP */
+    .short  0x0009                              /* $0234EA: NOP */
+    .short  0x0009                              /* $0234EC: NOP */
 
 /* ============================================================================
- * End of func_021 (38 bytes = 19 words)
+ * End of func_021 trampoline (38 bytes = 19 words)
+ * Target: vertex_transform_optimized at expansion ROM $023011E0
  * ============================================================================ */
