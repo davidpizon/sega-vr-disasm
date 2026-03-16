@@ -12,8 +12,7 @@
 
 wait_for_vblank:
         move.w  #$0004,VINT_STATE.w             ; $004998: $31FC $0004 $C87A - request V-INT state 1
-        stop    #$2300                          ; $00499E: $4E72 $2300 - halt until V-INT (level 6 > 3)
-        rts                                     ; $0049A2: $4E75
-        nop                                     ; $0049A4: padding to preserve 18-byte size
-        nop                                     ; $0049A6: padding
-        nop                                     ; $0049A8: padding
+        stop    #$2300                          ; $00499E: $4E72 $2300 - halt until interrupt
+        tst.w   VINT_STATE.w                    ; $0049A2: V-INT cleared $C87A? (H-INT filter)
+        bne.s   wait_for_vblank+6               ; $0049A6: no → back to STOP (spurious wake)
+        rts                                     ; $0049A8: $4E75
