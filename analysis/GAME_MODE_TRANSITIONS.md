@@ -95,53 +95,61 @@ Found by searching all `move.l #$xxxx,$00FF0002` in the codebase:
 
 ---
 
-## 4. COMM Command Code ($C8A8) Per Mode
+## 4. COMM Command Code ($C8A8) Per Mode (CORRECTED 2026-03-16)
 
-The COMM command code determines which SH2 handler processes the FIFO DMA data.
+The COMM command code determines which SH2 handler processes the FIFO DMA data. `mars_dma_xfer_vdp_fill` reads the high byte as COMM0_HI (trigger) and low byte as COMM0_LO (command ID).
 
 | When | $C8A8 Value | COMM0 | SH2 Handler | Purpose |
 |------|-------------|-------|-------------|---------|
-| `scene_init_orch` | `$0102` | HI=$01, LO=$02 | **cmd $02** ($06000CFC) | Scene orchestrator (HEAVY — entity loops, display lists) |
-| `race_scene_init_vdp_mode` | `$0103` | HI=$01, LO=$03 | **cmd $03** ($06000CC4) | Racing per-frame (LIGHT — buffer clear + done) |
-| `state_reset_multi`, `full_state_reset_b`, `game_logic_init_state_dispatch` | `$0000` | HI=$00, LO=$00 | **None** (COMM0_HI=0 → no dispatch) | Reset/cleared state |
+| `race_scene_init_vdp_mode:34` | `$0103` | HI=$01, LO=$03 | **cmd $03** ($06000CC4) | **One-time** buffer clear during scene init |
+| `scene_init_orch:105` | `$0102` | HI=$01, LO=$02 | **cmd $02** ($06000CFC) | **Per-frame** scene orchestrator (ALL modes) |
+| 5 reset functions | `$0000` | HI=$00, LO=$00 | **None** (no dispatch) | Reset/cleared state |
 
-**CRITICAL:** After `scene_init_orch`, $C8A8 = $0102 until `race_scene_init_vdp_mode` changes it to $0103. If a race mode's scene init doesn't call `race_scene_init_vdp_mode`, $C8A8 remains $0102 and **every per-frame DMA triggers the heavy scene orchestrator on the SH2**, not the lightweight racing handler.
+**CORRECTION:** Previous documentation stated that $C8A8 = $0103 persists during racing. This is WRONG. `race_scene_init_vdp_mode` sets $0103 at line 34, but the value is consumed by the immediate COMM0 write at lines 35-36, and then **overwritten to $0102** when execution falls through to `scene_init_orch` (verified: no RTS/JMP/BRA between $00C0F0 and $00C200 — see `SCENE_HANDLER_ARCHITECTURE.md` §5 for proof).
+
+**Result:** C8A8 = $0102 for ALL per-frame DMA in ALL modes. Cmd $02 (scene orchestrator) is the universal per-frame command. Cmd $03 is only sent once during scene initialization.
+
+**HAZARD:** C8A8 = $0000 after state resets. If `mars_dma_xfer_vdp_fill` runs while C8A8 = $0000, COMM0_HI=$00 → SH2 never dispatches → no ACK → infinite hang at `.wait_ack`.
 
 ---
 
 ## 5. Mode Transition Flow
 
-### Power-On → Racing
+### Power-On → Racing (CORRECTED 2026-03-16)
 
 ```
 Boot ($00894262)
   → adapter_init, VDP init, Z80 load
   → scene_init_orch ($00C200)
-    → Sets $C8A8 = $0102 (scene orchestrator)
+    → Sets $C8A8 = $0102 (scene orchestrator — per-frame value)
     → Waits SH2 ready
-    → Sets $FF0002 = $0088C30A
+    → Sets $FF0002 = $0088C30A (state_disp_00c30a)
 
 Menu selection
   → scene_setup_game_mode_transition ($00E00C)
     → Clears $C87E = 0
-    → Sets $FF0002 = scene handler ($0088E5CE for 1P)
-    → If not demo: Sets $FF0002 = loading handler ($00884A3E)
+    → Sets $FF0002 = $0088E5CE (display init)
+    → If not demo: Overwrites $FF0002 = $00884A3E (loading handler)
 
-Loading phase (runs once)
-  → Loading handler at $FF0002
-    → Initializes track, VDP, sound
-    → race_scene_init_vdp_mode ($00C120)
-      → Sets $C8A8 = $0103 (racing per-frame) ← CRITICAL
-      → Writes COMM0 directly (one-time scene setup on SH2)
-    → Sets $FF0002 = game handler ($0088FB98)
+Loading phase (runs once, non-demo only)
+  → race_scene_init_004a32 ($004A3E) — 1P loading handler
+    → Track, VDP, graphics, sound initialization
+    → Calls race_scene_init_vdp_mode ($00C0F0)
+      → C8A8 = $0103 → COMM0 $01/$03 (one-time SH2 scene init)
+      → Falls through to scene_init_orch → C8A8 = $0102 (OVERWRITES $0103)
+    → Sets $FF0002 = $00884CBC (countdown dispatcher)
+
+Display init (runs once)
+  → sh2_split_screen_display_init ($0088E5CE)
+    → VDP, palette, tile configuration
+    → Sends COMM0 $01/$03 (one-time buffer clear)
+    → Sets $FF0002 = $0088E90C (palette_scene_dispatch)
 
 Racing phase (per-frame loop)
-  → Game handler at $FF0002
-    → Routes to one of 5 race sub-dispatchers
-    → Sub-dispatcher reads $C87E, indexes jump table
-    → State 0: mars_dma_xfer_vdp_fill (sends cmd $03 to SH2)
-    → State 4: light work
-    → State 8: full game frame + swap
+  → Sub-dispatcher reads $C87E, indexes jump table
+  → State 0: mars_dma_xfer_vdp_fill (sends cmd $02 via C8A8=$0102)
+  → State 4: game logic
+  → State 8: frame completion + state advance
 ```
 
 ### Attract Mode
@@ -149,46 +157,58 @@ Racing phase (per-frame loop)
 ```
 scene_setup_game_mode_transition
   → Detects $A018 != 0 (demo flag)
-  → Sets $FF0002 = $0088E5CE (same as 1P racing)
-  → SKIPS loading handler (no race_scene_init_vdp_mode!)
-  → $C8A8 may still be $0102 from scene_init_orch
+  → Sets $FF0002 = $0088E5CE (display init) — NO loading handler
+  → C8A8 = $0102 (persists from boot's scene_init_orch)
+
+Frame 1: display init configures VDP, sends COMM $01/$03
+  → $FF0002 = $0088E90C (palette_scene_dispatch)
+Subsequent frames: palette_scene_dispatch + attract sub-dispatcher
+  → mars_dma_xfer_vdp_fill sends cmd $02 (same as racing — C8A8=$0102)
 ```
 
-**IMPLICATION:** During attract mode, `mars_dma_xfer_vdp_fill` may send **cmd $02** (scene orchestrator) to the SH2, not cmd $03. The SH2 runs the heavy orchestrator every frame, not the lightweight racing handler.
+**NOTE:** C8A8 = $0102 in ALL modes (corrected — see §4). The per-frame DMA command is always cmd $02 (scene orchestrator). See `SCENE_HANDLER_ARCHITECTURE.md` for full analysis.
 
 ---
 
-## 6. Why Phase B Camera Interpolation Crashed
+## 6. Why Phase B Camera Interpolation Crashed (REVISED 2026-03-16)
 
-### Root Cause Hypothesis
+### Old Hypothesis (DISPROVEN)
 
-The `state4_interp_only` function calls `mars_dma_xfer_vdp_fill` for re-DMA, which sends whatever COMM command is in $C8A8. During:
+Previously thought: C8A8 = $0102 (heavy) vs $0103 (light) caused the crash. **Wrong** — C8A8 = $0102 in ALL modes. The per-frame command is always cmd $02. See §4 correction.
 
-1. **Active racing ($C8A8 = $0103):** Sends cmd $03 (lightweight, ~10K cycles). SH2 finishes quickly. Block-copy + re-DMA work fine. **This is why 005020 works.**
+### Revised Root Cause (Three Factors)
 
-2. **Attract mode / pre-race ($C8A8 = $0102 or $0000):** Sends cmd $02 (heavy scene orchestrator, 100K+ cycles) or cmd $00 (no dispatch). The second DMA in state 4 either:
-   - Triggers a heavy SH2 re-render that takes 2+ TV frames → state machine desync → crash
-   - Sends COMM0_HI=$00 (no dispatch) → SH2 never ACKs → mars_dma_xfer_vdp_fill hangs at `.wait_ack`
+**Factor 1 — No SH2-idle check before COMM0 write:**
+`mars_dma_xfer_vdp_fill` (lines 21-22) writes COMM0 **without checking COMM0_HI==0 first**. The state 4 re-DMA sends a second cmd $02 while the Master SH2 may still be processing the first, clobbering the pending command.
+
+**Factor 2 — C8A8 = $0000 after state resets:**
+Five functions clear C8A8 to $0000. If re-DMA fires after a reset, COMM0_HI=$00 → SH2 never dispatches → no ACK → infinite hang at `.wait_ack`.
+
+**Factor 3 — V-INT state mismatch:**
+Active racing writes $0014 to $FF0008; other modes write $0010. V-INT handler behavior differs, potentially affecting SH2 synchronization during state 4.
 
 ### Solution Requirements
 
-Before extending camera interpolation to other dispatchers, we must:
+1. **Guard C8A8:** Before re-DMA in state 4, verify C8A8 != $0000. Skip if zero.
+2. **Wait for SH2 idle:** Poll COMM0_HI == 0 before writing COMM0.
+3. **Match V-INT state:** Use the target dispatcher's expected V-INT value.
+4. **Skip attract/replay initially:** These skip full loading → incomplete SH2 init.
 
-1. **Verify $C8A8 value** for each mode — only hook dispatchers where $C8A8 = $0103
-2. **Or guard the re-DMA** — check $C8A8 before calling mars_dma_xfer_vdp_fill in state4_interp_only, skip if not $0103
-3. **Or force $C8A8 = $0103** during attract/replay scene init (risky — may break SH2 rendering in those modes)
+See `SCENE_HANDLER_ARCHITECTURE.md` §8 for full analysis.
 
 ---
 
-## 7. Safe Intervention Points
+## 7. Safe Intervention Points (REVISED 2026-03-16)
 
 | Dispatcher | $C8A8 at Runtime | Safe for Interp? | Notes |
 |-----------|-----------------|-------------------|-------|
-| `state_disp_005020` | $0103 (confirmed) | **YES** (already working) | Loading handler sets $C8A8 |
-| `state_disp_004cb8` | $0103 (likely) | **NEEDS VERIFICATION** | Same loading path as 005020? |
-| `state_disp_005308` | $0103 (likely) | **NEEDS VERIFICATION** | Post-race, loading already ran |
-| `state_disp_005586` | $0102 or $0000 (RISK) | **NO — needs guard** | Demo mode skips loading handler |
-| `state_disp_005618` | $0102 or $0000 (RISK) | **NO — needs guard** | Replay, may skip loading handler |
+| `state_disp_005020` | $0102 (confirmed) | **YES** (already working) | Full loading path completed |
+| `state_disp_004cb8` | $0102 (same path) | **LIKELY YES** | Same loading → scene_init_orch path |
+| `state_disp_005308` | $0102 (post-race) | **LIKELY YES** | Loading ran before race started |
+| `state_disp_005586` | $0102 (from boot) | **NEEDS GUARD** | No full loading, SH2 init may be incomplete |
+| `state_disp_005618` | $0102 (from boot) | **NEEDS GUARD** | No full loading, SH2 init may be incomplete |
+
+**Key change:** C8A8 is $0102 everywhere, not $0103. The risk for attract/replay is not the command value but incomplete SH2 scene initialization and potential C8A8=$0000 during transitions.
 
 ---
 
@@ -196,9 +216,11 @@ Before extending camera interpolation to other dispatchers, we must:
 
 | File | Purpose |
 |------|---------|
+| `analysis/SCENE_HANDLER_ARCHITECTURE.md` | **Complete scene handler reference (Phase A2)** |
 | `disasm/modules/68k/game/scene/scene_setup_game_mode_transition.asm` | Master mode selector |
 | `disasm/modules/68k/game/scene/scene_init_orch.asm` | Scene init (sets $C8A8=$0102) |
-| `disasm/modules/68k/game/scene/race_scene_init_vdp_mode.asm` | Race init (sets $C8A8=$0103) |
+| `disasm/modules/68k/game/scene/race_scene_init_vdp_mode.asm` | Race init (C8A8=$0103, overwritten by fall-through) |
 | `disasm/modules/68k/game/scene/sh2_handler_dispatch_scene_init.asm` | Handler replacement mechanism |
+| `disasm/modules/68k/game/race/race_scene_init_004a32.asm` | 1P loading handler |
 | `disasm/modules/68k/game/state/state_disp_*.asm` | 5 race sub-dispatchers |
 | `disasm/modules/68k/game/render/mars_dma_xfer_vdp_fill.asm` | DMA function (reads $C8A8) |

@@ -11,9 +11,10 @@ Pick the highest-priority unclaimed task. Mark it `IN PROGRESS` with your sessio
 ### R-001: Disassemble SH2 handler $060008A0 (render trigger)
 **Status:** DONE (2026-03-16) — **Blocker 2 was a misdiagnosis**
 **Priority:** P0 → resolved
-**Finding:** Disassembly revealed that racing uses **cmd $03** → handler `$06000CC4` (lightweight trigger: buffer clear + state flags + done signal), NOT cmd $01 → `$060008A0` (full scene-init orchestrator). The working 40 FPS code already calls `mars_dma_xfer_vdp_fill` twice per game frame (state 0 + state 4), proving re-DMA triggers a second SH2 render. The "zero visual effect" observation came from 3 known bugs in the WIP 60fps module, not from a hardware/firmware limitation.
+**Finding:** Per-frame DMA uses **cmd $02** (`$C8A8 = $0102`) → handler `$06000CFC` (scene orchestrator). Cmd $03 (`$06000CC4`) is a **one-time** buffer clear sent during scene init only (see `SCENE_HANDLER_ARCHITECTURE.md` §5). The working 40 FPS code already calls `mars_dma_xfer_vdp_fill` twice per game frame (state 0 + state 4), proving re-DMA triggers a second SH2 render. The "zero visual effect" observation came from 3 known bugs in the WIP 60fps module, not from a hardware/firmware limitation.
 **Handler architecture documented:**
-- Cmd $03 (`$06000CC4`): clears buffers via `$06004300`, writes state flags `$0600F208`, tail-calls `$060043FC` (COMM0 clear + COMM1 done)
+- Cmd $02 (`$06000CFC`): scene orchestrator, per-frame (entity loop callers)
+- Cmd $03 (`$06000CC4`): one-time buffer clear during scene init only
 - Cmd $01 (`$060008A0`): 10-subroutine orchestrator (DMAC setup, SRAM copy, entity loop, main coordinator)
 - Jump table at `$06000780`: 16 entries, cmd $00-$06 active, $07+ → default `$06000490`
 **Impact:** Only Blocker 1 (FS swap timing) remains for A-2 (60 FPS)

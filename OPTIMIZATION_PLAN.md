@@ -124,9 +124,9 @@ The old model assumed 1 render per game frame. With camera interpolation, multip
 
 **SH2 budget for 60 FPS:** 3 × ~300K = ~900K / 1,149K = **78%** — tight but feasible (same as original 20 FPS single-render utilization).
 
-**Key insight (revised):** Display FPS can exceed game logic FPS by adding block-copy + frame swap passes. However, two hardware constraints limit this:
+**Key insight (revised):** Display FPS can exceed game logic FPS by adding block-copy + frame swap passes. One hardware constraint remains:
 1. **FS writes outside VBlank are deferred** — frame buffer swaps MUST happen inside V-INT handlers, not in the main loop (hardware manual page 35)
-2. **Re-DMA does not trigger SH2 re-render** — calling `mars_dma_xfer_vdp_fill` twice per frame sends data but the SH2 handler doesn't re-render. The render trigger mechanism inside `$060008A0` is not yet understood.
+2. ~~Re-DMA does not trigger SH2 re-render~~ — **RESOLVED:** Re-DMA DOES trigger re-render. Per-frame DMA uses cmd $02 (C8A8=$0102, scene orchestrator). The 40 FPS code proves this. See `SCENE_HANDLER_ARCHITECTURE.md` §5 and `VINT_HANDLER_ARCHITECTURE.md` §6 for R-002 design.
 
 ---
 

@@ -115,6 +115,9 @@ disasm/vrd.asm (entry point)
 | **Quick address lookup (flat, ctrl+F)** | **[analysis/FUNCTION_QUICK_LOOKUP.md](analysis/FUNCTION_QUICK_LOOKUP.md)** |
 | **SH2 command handlers (all 7 decoded)** | **[analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md](analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md)** |
 | **Frame execution flow (start here)** | **[analysis/SYSTEM_EXECUTION_FLOW.md](analysis/SYSTEM_EXECUTION_FLOW.md)** |
+| **Scene handler architecture (Phase A2)** | **[analysis/SCENE_HANDLER_ARCHITECTURE.md](analysis/SCENE_HANDLER_ARCHITECTURE.md)** |
+| **V-INT handler architecture (R-002)** | **[analysis/VINT_HANDLER_ARCHITECTURE.md](analysis/VINT_HANDLER_ARCHITECTURE.md)** |
+| **Slave SH2 dispatch (S-5/S-8/S-9)** | **[analysis/SLAVE_SH2_DISPATCH_ARCHITECTURE.md](analysis/SLAVE_SH2_DISPATCH_ARCHITECTURE.md)** |
 | **Rendering pipeline (end-to-end)** | **[analysis/RENDERING_PIPELINE.md](analysis/RENDERING_PIPELINE.md)** |
 | 68K function catalog (503+, older) | [analysis/68K_FUNCTION_REFERENCE.md](analysis/68K_FUNCTION_REFERENCE.md) |
 | 68K↔SH2 communication | [analysis/68K_SH2_COMMUNICATION.md](analysis/68K_SH2_COMMUNICATION.md) |

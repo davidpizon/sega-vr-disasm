@@ -507,14 +507,14 @@ This means writing FS outside VBlank is DEFERRED to the next VBlank. Our inline 
 
 ### ~~Re-DMA Does NOT Trigger SH2 Re-Render~~ — MISDIAGNOSIS (March 16, 2026)
 
-**STATUS: RESOLVED.** Re-DMA DOES trigger SH2 re-render. The working 40 FPS code (A-1, commit b6bd487) calls `mars_dma_xfer_vdp_fill` **twice** per game frame — state 0 (`camera_snapshot_wrapper`) and state 4 (`camera_avg_and_redma`). Both calls trigger SH2 renders via cmd $03 handler.
+**STATUS: RESOLVED.** Re-DMA DOES trigger SH2 re-render. The working 40 FPS code (A-1, commit b6bd487) calls `mars_dma_xfer_vdp_fill` **twice** per game frame — state 0 (`camera_snapshot_wrapper`) and state 4 (`camera_avg_and_redma`). Both calls trigger SH2 renders via cmd $02 (scene orchestrator).
 
 The original "zero visual effect" observation came from 3 known bugs in the WIP `camera_interpolation_60fps.asm`: (1) BSR.W displacement error, (2) block-copy from wrong source `$06030000`, (3) state 0 additions that broke the 40 FPS path.
 
-**SH2 racing handler architecture (disassembled March 16):**
-- **Per-frame racing uses cmd $03** → handler `$06000CC4` (lightweight: buffer clear `$06004300` + state flags `$0600F208` + completion `$060043FC`)
-- **NOT cmd $01** → handler `$060008A0` (full 10-subroutine scene-init orchestrator)
-- Jump table at `$06000780`: index = COMM0_LO, SHLL2'd. Racing sets $C8A8=$0103 → COMM0_HI=$01, COMM0_LO=$03
+**SH2 racing handler architecture (disassembled March 16, CORRECTED March 16 evening):**
+- **Per-frame DMA uses cmd $02** → handler `$06000CFC` (scene orchestrator, entity loop callers). C8A8 = $0102 in ALL modes (see `SCENE_HANDLER_ARCHITECTURE.md` §5).
+- **Cmd $03** → handler `$06000CC4` is a **one-time** buffer clear sent during scene init only (race_scene_init_vdp_mode sets $0103, consumed by COMM0 write, then overwritten to $0102 by scene_init_orch fall-through).
+- Jump table at `$06000780`: index = COMM0_LO, SHLL2'd
 
 **Rule:** When debugging "X doesn't work," check whether the observation came from buggy test code. The 40 FPS A-1 code is the authoritative proof that re-DMA + re-render works.
 
