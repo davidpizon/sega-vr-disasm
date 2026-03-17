@@ -2,7 +2,7 @@
 
 Agent briefing for Virtua Racing Deluxe 32X disassembly/reassembly project.
 
-**Last Updated**: March 8, 2026
+**Last Updated**: March 16, 2026
 
 ## Agent Team (v3)
 
@@ -80,11 +80,35 @@ disasm/vrd.asm (entry point)
 - **823 68K modules** (736 fully translated, 87 with remaining dc.w — all data, not code)
 - **All SH2 functions** integrated (92 function IDs via 89 .inc files, zero remaining)
 - **Display FPS**: ~40 (camera interpolation, stable frame pacing). Game logic at 20 FPS.
-- **Master SH2**: 0-36% util (command router + block copies). **Slave SH2**: ~73% (ALL 3D rendering, the bottleneck — S-6 saved ~5%)
-- **Dual pipeline**: On-chip SRAM (1748B, self-contained, untouchable) + SDRAM cache (37% hotspot, optimization target)
-- **60 FPS blockers**: FS swap requires VBlank timing (only remaining blocker — re-DMA works, was misdiagnosis)
-- **Rendering**: Pipeline 1 (on-chip SRAM, 36 entities/frame) + Pipeline 2 (SDRAM cache, profiled hotspots)
-- **Master SH2 commands**: 7 active ($00-$06) — all disassembled March 2026. See [SH2_COMMAND_HANDLER_REFERENCE.md](analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md)
+- **60 FPS blocker**: FS swap must happen during VBlank → need swap-only V-INT handler (R-002). Design ready, 4 table slots available. See [VINT_HANDLER_ARCHITECTURE.md](analysis/VINT_HANDLER_ARCHITECTURE.md) §6.
+- **Master SH2 commands**: 7 active ($00-$06) — all disassembled. See [SH2_COMMAND_HANDLER_REFERENCE.md](analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md)
+
+### 68K Game Architecture
+
+The game uses a **two-level dispatch** system. See [SCENE_HANDLER_ARCHITECTURE.md](analysis/SCENE_HANDLER_ARCHITECTURE.md) for full reference.
+
+**Level 1 — Scene handler** (`$FF0002`): Self-modifying main loop at `$FF0000` calls `JSR [$FF0002]` each frame. Changing this pointer changes the game mode (loading, display init, racing, menus, etc.). Over 20 distinct handlers exist.
+
+**Level 2 — State dispatcher** (`$C87E`): Within each scene handler, a sub-dispatcher reads `$C87E` (game state, increments by 4), indexes a jump table, and executes the appropriate state handler. Five race sub-dispatchers handle countdown, active racing, results, attract, and replay.
+
+**V-INT state** (`$C87A` via `$FF0008`): Each state handler writes a V-INT state that controls which V-INT sub-handler runs during the next VBlank. 16+ entries in the jump table at `$0016B2`. State `$0054` = frame swap handler (checks COMM1_LO "done" signal, resets `$C87E`, toggles FS bit). See [VINT_HANDLER_ARCHITECTURE.md](analysis/VINT_HANDLER_ARCHITECTURE.md).
+
+**$C8A8 command staging**: `mars_dma_xfer_vdp_fill` reads `$C8A8` and writes its bytes to COMM0 for SH2 dispatch. **C8A8 = $0102 for ALL per-frame DMA in ALL modes** (cmd $02 = scene orchestrator). Cmd $03 ($0103) is one-time init only — `race_scene_init_vdp_mode` sets it but falls through to `scene_init_orch` which overwrites to $0102.
+
+### SH2 Architecture
+
+**Dual independent dispatch** — Master and Slave have completely separate poll loops. See [SLAVE_SH2_DISPATCH_ARCHITECTURE.md](analysis/SLAVE_SH2_DISPATCH_ARCHITECTURE.md).
+
+| CPU | Loop | Polls | Jump Table | Utilization | Role |
+|-----|------|-------|-----------|-------------|------|
+| Master | $06000460 | COMM0_HI | $06000780 (16 entries) | 0-36% | Command router + block copies |
+| Slave | $06000592 | COMM2_HI | $060005C8 (8 entries) | ~73% | **ALL 3D rendering (bottleneck)** |
+
+No direct cross-trigger. 68K submits to Master (COMM0) and Slave (COMM2) independently. COMM7 = async doorbell for cmd_27 pixel work (Slave polls in idle loop). COMM1_LO bit 0 = Master "done" signal.
+
+**Dual rendering pipeline** (both on Slave):
+- **Pipeline 1**: On-chip SRAM ($C0000000, 1748B). Self-contained, zero wait states. 36 entities/frame in 3 batches. **Untouchable.**
+- **Pipeline 2**: SDRAM cache ($06003024 main_coordinator_short). coord_transform (12%), frustum_cull (12%), span_filler (8%). **Optimization target** — S-6 saved ~5%.
 
 ### Critical Constraint: Expansion ROM ($300000+)
 
@@ -100,35 +124,53 @@ disasm/vrd.asm (entry point)
 
 ## Where to Look
 
+### Project Management
 | Question | File |
 |----------|------|
 | What to work on next | [BACKLOG.md](BACKLOG.md) |
 | Known pitfalls and bugs | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) |
 | Strategic optimization roadmap | [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) |
+
+### Game Architecture (start here for understanding the game)
+| Question | File |
+|----------|------|
+| **Frame execution flow** | **[analysis/SYSTEM_EXECUTION_FLOW.md](analysis/SYSTEM_EXECUTION_FLOW.md)** |
+| **Scene handler chain ($FF0002, $C87E, $C8A8)** | **[analysis/SCENE_HANDLER_ARCHITECTURE.md](analysis/SCENE_HANDLER_ARCHITECTURE.md)** |
+| **Game mode transitions (boot→menu→racing)** | **[analysis/GAME_MODE_TRANSITIONS.md](analysis/GAME_MODE_TRANSITIONS.md)** |
+| **V-INT dispatch table + frame swap mechanism** | **[analysis/VINT_HANDLER_ARCHITECTURE.md](analysis/VINT_HANDLER_ARCHITECTURE.md)** |
+| **Rendering pipeline (end-to-end)** | **[analysis/RENDERING_PIPELINE.md](analysis/RENDERING_PIPELINE.md)** |
+
+### SH2 Architecture
+| Question | File |
+|----------|------|
+| **Master SH2 command handlers (all 7)** | **[analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md](analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md)** |
+| **Slave SH2 dispatch + dual pipeline** | **[analysis/SLAVE_SH2_DISPATCH_ARCHITECTURE.md](analysis/SLAVE_SH2_DISPATCH_ARCHITECTURE.md)** |
+| **SH2 3D engine algorithms** | **[analysis/sh2-analysis/SH2_3D_ENGINE_DEEP_DIVE.md](analysis/sh2-analysis/SH2_3D_ENGINE_DEEP_DIVE.md)** |
+| **SH2 rendering architecture (Pipeline 1+2)** | **[analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md](analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md)** |
+| Master SH2 dispatch + COMM7 design | [analysis/architecture/MASTER_SH2_DISPATCH_ANALYSIS.md](analysis/architecture/MASTER_SH2_DISPATCH_ANALYSIS.md) |
+| SH2 3D pipeline (overview) | [analysis/sh2-analysis/SH2_3D_PIPELINE_ARCHITECTURE.md](analysis/sh2-analysis/SH2_3D_PIPELINE_ARCHITECTURE.md) |
+| SH2 translation guide | [analysis/sh2-analysis/SH2_TRANSLATION_INTEGRATION.md](analysis/sh2-analysis/SH2_TRANSLATION_INTEGRATION.md) |
+
+### Hardware & Communication
+| Question | File |
+|----------|------|
 | Hardware reference (start here) | [docs/development-guide.md](docs/development-guide.md) |
 | Complete hardware manual | [docs/32x-hardware-manual.md](docs/32x-hardware-manual.md) |
 | SH2 instruction set + opcode map | [docs/sh1-sh2-cpu-core-architecture.md](docs/sh1-sh2-cpu-core-architecture.md) |
 | 68K instruction set + opcode map | [docs/motorola-68000-programmers-reference.md](docs/motorola-68000-programmers-reference.md) |
 | SH7604 CPU datasheet (600+ pp) | [docs/sh7604-hardware-manual.md](docs/sh7604-hardware-manual.md) |
-| All documentation index | [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) |
+| COMM registers hardware deep dive | [analysis/COMM_REGISTERS_HARDWARE_ANALYSIS.md](analysis/COMM_REGISTERS_HARDWARE_ANALYSIS.md) |
+| 68K↔SH2 communication | [analysis/68K_SH2_COMMUNICATION.md](analysis/68K_SH2_COMMUNICATION.md) |
+| Register reference + hazards | [analysis/architecture/32X_REGISTERS.md](analysis/architecture/32X_REGISTERS.md) |
+
+### Function Reference & Profiling
+| Question | File |
+|----------|------|
 | **ALL functions (799 entries, auto-gen)** | **[analysis/MASTER_FUNCTION_REFERENCE.md](analysis/MASTER_FUNCTION_REFERENCE.md)** |
 | **Quick address lookup (flat, ctrl+F)** | **[analysis/FUNCTION_QUICK_LOOKUP.md](analysis/FUNCTION_QUICK_LOOKUP.md)** |
-| **SH2 command handlers (all 7 decoded)** | **[analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md](analysis/sh2-analysis/SH2_COMMAND_HANDLER_REFERENCE.md)** |
-| **Frame execution flow (start here)** | **[analysis/SYSTEM_EXECUTION_FLOW.md](analysis/SYSTEM_EXECUTION_FLOW.md)** |
-| **Scene handler architecture (Phase A2)** | **[analysis/SCENE_HANDLER_ARCHITECTURE.md](analysis/SCENE_HANDLER_ARCHITECTURE.md)** |
-| **V-INT handler architecture (R-002)** | **[analysis/VINT_HANDLER_ARCHITECTURE.md](analysis/VINT_HANDLER_ARCHITECTURE.md)** |
-| **Slave SH2 dispatch (S-5/S-8/S-9)** | **[analysis/SLAVE_SH2_DISPATCH_ARCHITECTURE.md](analysis/SLAVE_SH2_DISPATCH_ARCHITECTURE.md)** |
-| **Rendering pipeline (end-to-end)** | **[analysis/RENDERING_PIPELINE.md](analysis/RENDERING_PIPELINE.md)** |
 | 68K function catalog (503+, older) | [analysis/68K_FUNCTION_REFERENCE.md](analysis/68K_FUNCTION_REFERENCE.md) |
-| 68K↔SH2 communication | [analysis/68K_SH2_COMMUNICATION.md](analysis/68K_SH2_COMMUNICATION.md) |
-| COMM registers hardware deep dive | [analysis/COMM_REGISTERS_HARDWARE_ANALYSIS.md](analysis/COMM_REGISTERS_HARDWARE_ANALYSIS.md) |
-| Register reference + hazards | [analysis/architecture/32X_REGISTERS.md](analysis/architecture/32X_REGISTERS.md) |
-| Master SH2 dispatch + COMM7 design | [analysis/architecture/MASTER_SH2_DISPATCH_ANALYSIS.md](analysis/architecture/MASTER_SH2_DISPATCH_ANALYSIS.md) |
 | Bottleneck root cause | [analysis/ARCHITECTURAL_BOTTLENECK_ANALYSIS.md](analysis/ARCHITECTURAL_BOTTLENECK_ANALYSIS.md) |
-| SH2 3D pipeline | [analysis/sh2-analysis/SH2_3D_PIPELINE_ARCHITECTURE.md](analysis/sh2-analysis/SH2_3D_PIPELINE_ARCHITECTURE.md) |
-| **SH2 3D engine algorithms** | **[analysis/sh2-analysis/SH2_3D_ENGINE_DEEP_DIVE.md](analysis/sh2-analysis/SH2_3D_ENGINE_DEEP_DIVE.md)** |
-| **SH2 rendering architecture** | **[analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md](analysis/sh2-analysis/SH2_RENDERING_ARCHITECTURE.md)** |
-| SH2 translation guide | [analysis/sh2-analysis/SH2_TRANSLATION_INTEGRATION.md](analysis/sh2-analysis/SH2_TRANSLATION_INTEGRATION.md) |
+| All documentation index | [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) |
 | Profiling how-to | [tools/libretro-profiling/README_68K_PC_PROFILING.md](tools/libretro-profiling/README_68K_PC_PROFILING.md) |
 
 ## Module Categories
